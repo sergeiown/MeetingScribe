@@ -1,4 +1,4 @@
-# AudioProcessor
+# MeetingScribe
 
 Local speech-to-text with speaker diarization and known-speaker recognition.
 Everything runs on your own machine via [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
@@ -134,23 +134,51 @@ with periodic timestamps.
 
 ## Models and licenses
 
-No model weights are stored in this repository — they are downloaded separately
-by `download_models.py` into the local `models/` folder, **each under its own
-license**:
+No model weights are stored in this repository. They are downloaded separately
+by `download_models.py` into the local `models/` folder, and **each is covered
+by its own license — not by this project's MIT license**. You are responsible
+for accepting and complying with the terms of every model you download.
 
-- **pyannote** models (`speaker-diarization-3.1`, `segmentation-3.0`,
-  `wespeaker-voxceleb-resnet34-LM`, `embedding`) are **gated** and require
-  accepting their license on HuggingFace with a valid token (see Configuration).
-- **Whisper** models (`faster-whisper-large-v3-turbo`, and optionally
-  `faster-whisper-large-v3`) are downloaded from their respective HuggingFace
-  repositories under their own terms.
+### Speaker diarization & recognition — pyannote (gated)
 
-**Mandatory set:** the four pyannote models above plus Whisper `large-v3-turbo`
-(minimal recognition model). **Optional set:** Whisper `large-v3` for higher
-accuracy at the cost of size and speed.
+These require a HuggingFace account and accepting the conditions on each model
+page (see [Configuration](#configuration-huggingface-token)):
 
-You are responsible for complying with the license terms of each model you
-download.
+| Model | Page | Used for |
+|---|---|---|
+| `pyannote/speaker-diarization-3.1` | <https://hf.co/pyannote/speaker-diarization-3.1> | Diarization pipeline |
+| `pyannote/segmentation-3.0` | <https://hf.co/pyannote/segmentation-3.0> | Speech segmentation |
+| `pyannote/wespeaker-voxceleb-resnet34-LM` | <https://hf.co/pyannote/wespeaker-voxceleb-resnet34-LM> | Diarization embeddings |
+| `pyannote/embedding` | <https://hf.co/pyannote/embedding> | Known-speaker enrollment & matching |
+
+### Speech recognition — Whisper (via faster-whisper)
+
+Public repositories, downloaded under their own terms:
+
+| Model | Page | Notes |
+|---|---|---|
+| `Systran/faster-whisper-large-v3-turbo` | <https://hf.co/Systran/faster-whisper-large-v3-turbo> | **Mandatory** — default model (~1.6 GB) |
+| `Systran/faster-whisper-large-v3` | <https://hf.co/Systran/faster-whisper-large-v3> | **Optional** — higher accuracy (~3 GB, slower) |
+
+The underlying Whisper model is by OpenAI
+(<https://github.com/openai/whisper>), released under the MIT license.
+
+**Mandatory set:** the four pyannote models plus Whisper `large-v3-turbo`.
+**Optional set:** Whisper `large-v3`.
+
+## Built with
+
+This tool stands on these open-source projects (their own licenses apply):
+
+| Library | Project | License |
+|---|---|---|
+| faster-whisper | <https://github.com/SYSTRAN/faster-whisper> | MIT |
+| pyannote.audio | <https://github.com/pyannote/pyannote-audio> | MIT |
+| PyTorch | <https://github.com/pytorch/pytorch> | BSD-3-Clause |
+| NumPy | <https://github.com/numpy/numpy> | BSD-3-Clause |
+| huggingface_hub | <https://github.com/huggingface/huggingface_hub> | Apache-2.0 |
+| ffmpeg-python | <https://github.com/kkroening/ffmpeg-python> | Apache-2.0 |
+| FFmpeg | <https://ffmpeg.org/> | LGPL-2.1+/GPL |
 
 ## License
 

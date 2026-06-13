@@ -179,7 +179,7 @@ def c(color, text):
 def header():
     os.system("cls" if os.name == "nt" else "clear")
     print(c("cyan", "=" * 60))
-    print(c("bold", "  Audio Processor - Whisper Transcription"))
+    print(c("bold", "  MeetingScribe - Whisper Transcription"))
     print(c("dim",  "  Local processing via faster-whisper"))
     print(c("cyan", "=" * 60))
     print()
