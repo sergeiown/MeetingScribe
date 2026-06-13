@@ -1,0 +1,13 @@
+# Local config with secrets (never commit a real HF_TOKEN)
+config.env
+
+# Local-only data and runtime folders
+models/
+speakers/
+input/
+output/
+logs/
+
+# Python
+__pycache__/
+*.pyc

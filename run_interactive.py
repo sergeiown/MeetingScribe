@@ -903,7 +903,18 @@ def save_result(file_path, text):
     out.write_text(text, encoding="utf-8")
     return out
 
+def ensure_workdirs():
+    """Create the local working folders if any are missing.
+
+    All of these are git-ignored, so a fresh clone has none of them. Creating
+    them up front means running run.bat directly (without setup.bat first)
+    works instead of crashing on a missing input/ folder.
+    """
+    for d in (INPUT_DIR, OUTPUT_DIR, MODELS_DIR, SPEAKERS_DIR, LOGS_DIR):
+        d.mkdir(parents=True, exist_ok=True)
+
 def main():
+    ensure_workdirs()
     header()
     check_deps()
 
