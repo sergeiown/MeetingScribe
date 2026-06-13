@@ -1,5 +1,5 @@
 @echo off
-title AudioProc - Download Models
+title MeetingScribe - Download Models
 chcp 65001 >nul
 cd /d "%~dp0"
 if exist config.env (
