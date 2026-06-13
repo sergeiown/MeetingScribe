@@ -3,6 +3,10 @@ title MeetingScribe - Setup
 chcp 65001 >nul
 cd /d "%~dp0"
 
+rem Working folders (all git-ignored) so the user has somewhere to drop files
+rem right after setup, before run.bat is ever launched.
+if not exist input mkdir input
+if not exist output mkdir output
 if not exist logs mkdir logs
 set LOG=logs\setup.log
 echo === Setup started %DATE% %TIME% > %LOG%
