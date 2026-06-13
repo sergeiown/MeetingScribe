@@ -1,0 +1,18 @@
+# Core
+faster-whisper>=1.0.0
+pyannote.audio>=3.1.0
+torch>=2.0.0
+numpy>=1.24.0
+
+# pyannote deps
+omegaconf>=2.3.0
+huggingface_hub>=0.20.0
+
+# Audio processing
+ffmpeg-python>=0.2.0
+
+# NOTE: torch above installs CPU-only build.
+# For NVIDIA GPU (CUDA 12.6):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu126
+# For CUDA 11.8:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu118
