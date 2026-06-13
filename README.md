@@ -1,8 +1,10 @@
 # MeetingScribe
 
+**English** · [Українська](README.uk.md)
+
 Local speech-to-text with speaker diarization and known-speaker recognition.
 Everything runs on your own machine via [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-and [pyannote.audio](https://github.com/pyannote/pyannote-audio) — no cloud APIs,
+and [pyannote.audio](https://github.com/pyannote/pyannote-audio) - no cloud APIs,
 no audio ever leaves the host.
 
 Built for meeting and conversation recordings, primarily in **Ukrainian** and
@@ -24,7 +26,7 @@ falls back to a plain transcript with timestamps.
 
 ## Features
 
-- Fully local — runs offline once models are downloaded; no audio uploaded anywhere.
+- Fully local - runs offline once models are downloaded; no audio uploaded anywhere.
 - Speaker diarization (who spoke when) via pyannote `speaker-diarization-3.1`.
 - Known-speaker recognition against a local, versioned voiceprint database.
 - On-the-fly enrollment: name an unknown speaker and save their voiceprint
@@ -44,7 +46,7 @@ falls back to a plain transcript with timestamps.
 - Python dependencies from `requirements.txt` (faster-whisper, pyannote.audio,
   torch, numpy, huggingface_hub, ffmpeg-python).
 - A [HuggingFace](https://huggingface.co/) account and access token **for
-  diarization** (optional — without it the tool runs as plain transcription).
+  diarization** (optional - without it the tool runs as plain transcription).
 - Optional: an NVIDIA GPU with CUDA for faster processing (auto-detected;
   `setup.bat` installs the CUDA build of torch if a GPU is found).
 
@@ -136,10 +138,10 @@ with periodic timestamps.
 
 No model weights are stored in this repository. They are downloaded separately
 by `download_models.py` into the local `models/` folder, and **each is covered
-by its own license — not by this project's MIT license**. You are responsible
+by its own license - not by this project's MIT license**. You are responsible
 for accepting and complying with the terms of every model you download.
 
-### Speaker diarization & recognition — pyannote (gated)
+### Speaker diarization & recognition - pyannote (gated)
 
 These require a HuggingFace account and accepting the conditions on each model
 page (see [Configuration](#configuration-huggingface-token)):
@@ -151,14 +153,14 @@ page (see [Configuration](#configuration-huggingface-token)):
 | `pyannote/wespeaker-voxceleb-resnet34-LM` | <https://hf.co/pyannote/wespeaker-voxceleb-resnet34-LM> | Diarization embeddings |
 | `pyannote/embedding` | <https://hf.co/pyannote/embedding> | Known-speaker enrollment & matching |
 
-### Speech recognition — Whisper (via faster-whisper)
+### Speech recognition - Whisper (via faster-whisper)
 
 Public repositories, downloaded under their own terms:
 
 | Model | Page | Notes |
 |---|---|---|
-| `Systran/faster-whisper-large-v3-turbo` | <https://hf.co/Systran/faster-whisper-large-v3-turbo> | **Mandatory** — default model (~1.6 GB) |
-| `Systran/faster-whisper-large-v3` | <https://hf.co/Systran/faster-whisper-large-v3> | **Optional** — higher accuracy (~3 GB, slower) |
+| `Systran/faster-whisper-large-v3-turbo` | <https://hf.co/Systran/faster-whisper-large-v3-turbo> | **Mandatory** - default model (~1.6 GB) |
+| `Systran/faster-whisper-large-v3` | <https://hf.co/Systran/faster-whisper-large-v3> | **Optional** - higher accuracy (~3 GB, slower) |
 
 The underlying Whisper model is by OpenAI
 (<https://github.com/openai/whisper>), released under the MIT license.
@@ -183,4 +185,4 @@ This tool stands on these open-source projects (their own licenses apply):
 ## License
 
 This project's source code is released under the [MIT License](LICENSE). Model
-weights are **not** covered by this license — see "Models and licenses" above.
+weights are **not** covered by this license - see "Models and licenses" above.
