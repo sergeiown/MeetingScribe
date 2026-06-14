@@ -16,6 +16,7 @@ When stdin is not a terminal (piped) and no flag is given, behaves as --mandator
 
 import os
 import sys
+import time
 from pathlib import Path
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -116,15 +117,117 @@ def _download_pyannote(model_id, hf_token):
     )
 
 
-def _download_whisper(model_size, hf_repo):
+_IGNORE = ["*.msgpack", "*.h5", "flax_model*", "tf_model*"]
+
+
+def _download_whisper(model_size, hf_repo, hf_token=None):
     from huggingface_hub import snapshot_download
     local_dir = MODELS_DIR / model_size
     local_dir.mkdir(parents=True, exist_ok=True)
-    snapshot_download(
-        repo_id=hf_repo,
-        local_dir=str(local_dir),
-        ignore_patterns=["*.msgpack", "*.h5", "flax_model*", "tf_model*"],
-    )
+    try:
+        snapshot_download(repo_id=hf_repo, token=hf_token or None,
+                          local_dir=str(local_dir), ignore_patterns=_IGNORE)
+    except Exception as ex:
+        # a bad/expired token can 401 even on a public repo -> retry anonymously
+        if hf_token and any(s in str(ex) for s in ("401", "403", "authenticated", "credentials")):
+            snapshot_download(repo_id=hf_repo, token=None,
+                              local_dir=str(local_dir), ignore_patterns=_IGNORE)
+        else:
+            raise
+
+
+def _repo_total_bytes(repo_id, hf_token=None):
+    """Sum of the (non-ignored) file sizes in a HF repo, for the progress bar. 0 if unknown."""
+    try:
+        import fnmatch
+        from huggingface_hub import HfApi
+        info = HfApi().model_info(repo_id, files_metadata=True, token=hf_token or None)
+        total = 0
+        for s in info.siblings:
+            name = s.rfilename or ""
+            if any(fnmatch.fnmatch(name, p) for p in _IGNORE):
+                continue
+            total += (s.size or 0)
+        return total
+    except Exception:
+        return 0
+
+
+def _dir_size(path):
+    total = 0
+    for f in Path(path).rglob("*"):
+        try:
+            if f.is_file():
+                total += f.stat().st_size
+        except OSError:
+            pass
+    return total
+
+
+def _fmt_size(n):
+    n = float(n)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+
+
+def _fmt_eta(sec):
+    sec = int(sec)
+    m, s = divmod(sec, 60)
+    h, m = divmod(m, 60)
+    if h:
+        return f"{h}h {m:02d}m"
+    if m:
+        return f"{m}m {s:02d}s"
+    return f"{s}s"
+
+
+def _render_progress(label, cur, total, t0):
+    width = 24
+    if total > 0:
+        pct = min(cur / total, 1.0)
+        filled = int(width * pct)
+        bar = "█" * filled + "░" * (width - filled)
+        eta = ""
+        if pct > 0.02:
+            eta = "  ETA " + _fmt_eta((time.time() - t0) / pct * (1 - pct))
+        line = (f"  {label}  [{bar}] {int(pct*100):3d}%  "
+                f"{_fmt_size(cur)}/{_fmt_size(total)}{eta}")
+    else:
+        line = f"  {label}  downloading... {_fmt_size(cur)}"
+    sys.stdout.write("\r\033[2K" + line)
+    sys.stdout.flush()
+
+
+def _download_whisper_step(model_size, hf_repo, label, hf_token):
+    """Download a whisper model showing a single in-place progress bar with ETA.
+    Returns (ok, exception)."""
+    import threading
+    local_dir = MODELS_DIR / model_size
+    total = _repo_total_bytes(hf_repo, hf_token)
+    err = {}
+
+    def worker():
+        try:
+            _download_whisper(model_size, hf_repo, hf_token)
+        except Exception as ex:
+            err["ex"] = ex
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    t0 = time.time()
+    while t.is_alive():
+        _render_progress(label, _dir_size(local_dir), total, t0)
+        time.sleep(0.4)
+    t.join()
+    if "ex" in err:
+        sys.stdout.write("\r\033[2K")
+        sys.stdout.flush()
+        return False, err["ex"]
+    sys.stdout.write("\r\033[2K  " + label + "  " + c("green", "done") + "\n")
+    sys.stdout.flush()
+    return True, None
 
 
 def _parse_mode(argv):
@@ -199,10 +302,18 @@ def main():
         if mode == "interactive":
             hf_token = input(c("bold", "  Paste HF_TOKEN (Enter to skip diarization models): ")).strip()
         if not hf_token:
-            print(c("yellow", "  No valid HF_TOKEN set - speaker-diarization models will be skipped."))
-            print(c("dim",    "  Transcription still works without them. To enable diarization, put a"))
-            print(c("dim",    "  real token in config.env and accept the model licenses (see README)."))
+            print(c("yellow", "  No valid HF_TOKEN set:"))
+            print(c("dim",    "    - speaker-diarization models will be skipped (transcription still works)"))
+            print(c("dim",    "    - downloads are unauthenticated, so they may be noticeably slower"))
+            print(c("dim",    "  To enable diarization and faster downloads, put a real token in"))
+            print(c("dim",    "  config.env and accept the model licenses (see README), then re-run."))
             print()
+            if mode == "interactive":
+                ans = input(c("bold", "  Continue without a token? [Y/n]: ")).strip().lower()
+                if ans in ("n", "no", "q", "exit"):
+                    print(c("dim", "  Cancelled."))
+                    sys.exit(0)
+                print()
 
     ok, failed, skipped, needs_token = [], [], [], []
 
@@ -237,7 +348,7 @@ def main():
             print("  " + label + "  " + c("green", "already cached"))
             ok.append(model_size)
             continue
-        done, ex = _download_step(label, lambda ms=model_size, hr=hf_repo: _download_whisper(ms, hr))
+        done, ex = _download_whisper_step(model_size, hf_repo, label, hf_token)
         if done:
             ok.append(model_size)
         else:
@@ -267,7 +378,7 @@ def main():
             skipped.append(model_size)
             continue
 
-        done, ex = _download_step(label, lambda ms=model_size, hr=hf_repo: _download_whisper(ms, hr))
+        done, ex = _download_whisper_step(model_size, hf_repo, label, hf_token)
         if done:
             ok.append(model_size)
         else:
