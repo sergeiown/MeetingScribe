@@ -1,6 +1,6 @@
 # MeetingScribe
 
-[![Останній реліз](https://img.shields.io/badge/release-v1.2.0-blue)](https://github.com/sergeiown/MeetingScribe/releases/latest)
+[![Останній реліз](https://img.shields.io/badge/release-v1.2.1-blue)](https://github.com/sergeiown/MeetingScribe/releases/latest)
 
 [English](README.md) · **Українська**
 

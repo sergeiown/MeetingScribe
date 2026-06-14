@@ -35,11 +35,8 @@ if errorlevel 1 (
 for /f "tokens=*" %%v in ('python --version 2^>^&1') do echo Python: %%v >> %LOG%
 python --version
 
-rem Keep the PC awake for the whole setup (deps, CUDA torch and model downloads
-rem can take many minutes). A tiny background process holds the system-required
-rem flag and is killed at the end (:done).
-start "MS_AWAKE" /min python -c "import ctypes,time;ctypes.windll.kernel32.SetThreadExecutionState(2147483649);time.sleep(14400)" >nul 2>&1
-echo Sleep prevention: on >> %LOG%
+rem Note: sleep is prevented in-process during the long model download
+rem (download_models.py uses SetThreadExecutionState, same as run_interactive.py).
 
 echo.
 echo [2/7] Checking ffmpeg...
@@ -141,8 +138,6 @@ if errorlevel 1 (
 )
 
 :done
-taskkill /fi "WINDOWTITLE eq MS_AWAKE" /f >nul 2>&1
-echo Sleep prevention: off >> %LOG%
 echo === Setup finished %DATE% %TIME% >> %LOG%
 echo.
 echo ============================================================
