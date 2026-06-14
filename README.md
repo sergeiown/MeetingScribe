@@ -1,5 +1,7 @@
 # MeetingScribe
 
+[![Latest release](https://img.shields.io/github/v/release/sergeiown/MeetingScribe?label=release)](https://github.com/sergeiown/MeetingScribe/releases/latest)
+
 **English** · [Українська](README.uk.md)
 
 Local speech-to-text with speaker diarization and known-speaker recognition.
@@ -7,8 +9,8 @@ Everything runs on your own machine via [faster-whisper](https://github.com/SYST
 and [pyannote.audio](https://github.com/pyannote/pyannote-audio) - no cloud APIs,
 no audio ever leaves the host.
 
-Built for meeting and conversation recordings, primarily in **Ukrainian** and
-**Russian**, with automatic language detection.
+Built for meeting and conversation recordings, primarily in **Ukrainian**, with
+automatic language detection (Whisper is multilingual, so other languages work too).
 
 ## How it works
 
@@ -31,7 +33,8 @@ falls back to a plain transcript with timestamps.
 - Known-speaker recognition against a local, versioned voiceprint database.
 - On-the-fly enrollment: name an unknown speaker and save their voiceprint
   (`Name (v1).npy`, `Name (v2).npy`, …), with overwrite / add-version / skip prompts.
-- Automatic language detection (tuned for mixed Ukrainian/Russian).
+- Automatic language detection, optimized for Ukrainian (other languages are
+  supported via Whisper's multilingual model).
 - CPU or NVIDIA CUDA, auto-detected.
 - Skips files already transcribed in `output/` (asks before overwriting), so
   re-running a batch does not redo finished work.
