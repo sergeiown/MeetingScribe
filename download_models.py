@@ -21,8 +21,10 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-# Keep huggingface_hub quiet: hide its "unauthenticated requests" warning and
-# info chatter so our own status lines stay readable.
+# Keep huggingface_hub quiet so our own one-line-per-model status stays readable:
+# turn off its tqdm progress bars (they interleave with our lines, and the
+# "unauthenticated requests" notice rides on one of them) and lower its logging.
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 import logging
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
@@ -136,6 +138,22 @@ def _parse_mode(argv):
     return "interactive"
 
 
+def _download_step(label, fn):
+    """Show one in-place status line: "label  downloading..." while fn() runs,
+    then overwrite it with the final status. Returns (ok, exception)."""
+    sys.stdout.write(f"  {label}  " + c("yellow", "downloading..."))
+    sys.stdout.flush()
+    try:
+        fn()
+    except Exception as ex:
+        sys.stdout.write("\r\033[2K")          # clear the line; caller prints the reason
+        sys.stdout.flush()
+        return False, ex
+    sys.stdout.write("\r\033[2K  " + label + "  " + c("green", "done") + "\n")
+    sys.stdout.flush()
+    return True, None
+
+
 def _set_sleep_prevention(active):
     """Windows: keep the machine awake during long downloads. No-op elsewhere."""
     if os.name != "nt":
@@ -192,47 +210,38 @@ def main():
     print(c("bold", "  Mandatory - speaker diarization (installed automatically):"))
     print()
     for model_id, label in PYANNOTE_MANDATORY:
-        sys.stdout.write(f"  {label}  ")
-        sys.stdout.flush()
         if _is_complete(model_id):
-            print(c("green", "already cached"))
+            print("  " + label + "  " + c("green", "already cached"))
             ok.append(model_id)
             continue
         if not hf_token:
-            print(c("yellow", "skipped (needs token)"))
+            print("  " + label + "  " + c("yellow", "skipped (needs token)"))
             needs_token.append(model_id)
             continue
-        print(c("yellow", "downloading..."))
-        try:
-            _download_pyannote(model_id, hf_token)
-            print(c("green", f"  {label}  done"))
+        done, ex = _download_step(label, lambda mid=model_id: _download_pyannote(mid, hf_token))
+        if done:
             ok.append(model_id)
-        except Exception as ex:
-            if any(s in str(ex) for s in ("401", "403", "gated", "restricted", "authenticated", "Cannot access")):
-                print(c("red", f"  {label}  access denied (token invalid or license not accepted)"))
-                needs_token.append(model_id)
-            else:
-                print(c("red", f"  {label}  failed: {str(ex).splitlines()[0][:80]}"))
-                failed.append(model_id)
+        elif any(s in str(ex) for s in ("401", "403", "gated", "restricted", "authenticated", "Cannot access")):
+            print("  " + label + "  " + c("red", "access denied (token invalid or license not accepted)"))
+            needs_token.append(model_id)
+        else:
+            print("  " + label + "  " + c("red", f"failed: {str(ex).splitlines()[0][:80]}"))
+            failed.append(model_id)
 
     # ── Mandatory: whisper ──────────────────────────────────────────────────
     print()
     print(c("bold", "  Mandatory - recognition model (installed automatically):"))
     print()
     for model_size, hf_repo, label in WHISPER_MANDATORY:
-        sys.stdout.write(f"  {label}  ")
-        sys.stdout.flush()
         if _is_whisper_complete(model_size):
-            print(c("green", "already cached"))
+            print("  " + label + "  " + c("green", "already cached"))
             ok.append(model_size)
             continue
-        print(c("yellow", "downloading..."))
-        try:
-            _download_whisper(model_size, hf_repo)
-            print(c("green", f"  {label}  done"))
+        done, ex = _download_step(label, lambda ms=model_size, hr=hf_repo: _download_whisper(ms, hr))
+        if done:
             ok.append(model_size)
-        except Exception as ex:
-            print(c("red", f"  {label}  FAILED: {ex}"))
+        else:
+            print("  " + label + "  " + c("red", f"failed: {str(ex).splitlines()[0][:80]}"))
             failed.append(model_size)
 
     # ── Optional: whisper ───────────────────────────────────────────────────
@@ -241,7 +250,7 @@ def main():
     print()
     for model_size, hf_repo, label in WHISPER_OPTIONAL:
         if _is_whisper_complete(model_size):
-            print(f"  {label}  " + c("green", "already cached"))
+            print("  " + label + "  " + c("green", "already cached"))
             ok.append(model_size)
             continue
 
@@ -254,19 +263,15 @@ def main():
             want = ans in ("y", "yes")
 
         if not want:
-            print(f"  {label}  " + c("dim", "skipped"))
+            print("  " + label + "  " + c("dim", "skipped"))
             skipped.append(model_size)
             continue
 
-        sys.stdout.write(f"  {label}  ")
-        sys.stdout.flush()
-        print(c("yellow", "downloading..."))
-        try:
-            _download_whisper(model_size, hf_repo)
-            print(c("green", f"  {label}  done"))
+        done, ex = _download_step(label, lambda ms=model_size, hr=hf_repo: _download_whisper(ms, hr))
+        if done:
             ok.append(model_size)
-        except Exception as ex:
-            print(c("red", f"  {label}  FAILED: {ex}"))
+        else:
+            print("  " + label + "  " + c("red", f"failed: {str(ex).splitlines()[0][:80]}"))
             failed.append(model_size)
 
     # ── Summary ─────────────────────────────────────────────────────────────
