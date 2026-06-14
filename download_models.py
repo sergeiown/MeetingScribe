@@ -21,6 +21,11 @@ from pathlib import Path
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+# Keep huggingface_hub quiet: hide its "unauthenticated requests" warning and
+# info chatter so our own status lines stay readable.
+import logging
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+
 COLORS = {
     "reset":  "\033[0m",
     "cyan":   "\033[96m",
@@ -131,6 +136,23 @@ def _parse_mode(argv):
     return "interactive"
 
 
+def _set_sleep_prevention(active):
+    """Windows: keep the machine awake during long downloads. No-op elsewhere."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        ES_CONTINUOUS      = 0x80000000
+        ES_SYSTEM_REQUIRED = 0x00000001
+        if active:
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+        else:
+            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+    except Exception:
+        pass
+
+
 def main():
     mode = _parse_mode(sys.argv[1:])
 
@@ -144,19 +166,27 @@ def main():
     MODELS_DIR.mkdir(exist_ok=True)
 
     cfg = load_config()
-    hf_token = os.environ.get("HF_TOKEN") or cfg.get("HF_TOKEN", "")
+    hf_token = (os.environ.get("HF_TOKEN") or cfg.get("HF_TOKEN", "")).strip()
+    if hf_token in ("", "hf_YOUR_TOKEN_HERE"):   # the example placeholder is not a real token
+        hf_token = ""
+
+    # Keep the machine awake while we download (can take many minutes).
+    _set_sleep_prevention(True)
+    import atexit
+    atexit.register(_set_sleep_prevention, False)
 
     # Token is only required for the gated pyannote repos. Whisper repos are public.
     pyannote_needed = [m for m in PYANNOTE_MANDATORY if not _is_complete(m[0])]
     if pyannote_needed and not hf_token:
         if mode == "interactive":
-            hf_token = input(c("bold", "  Paste HF_TOKEN (Enter to skip pyannote): ")).strip()
+            hf_token = input(c("bold", "  Paste HF_TOKEN (Enter to skip diarization models): ")).strip()
         if not hf_token:
-            print(c("yellow", "  No HF_TOKEN - mandatory pyannote models will be skipped."))
-            print(c("dim",    "  Set HF_TOKEN in config.env, then re-run."))
+            print(c("yellow", "  No valid HF_TOKEN set - speaker-diarization models will be skipped."))
+            print(c("dim",    "  Transcription still works without them. To enable diarization, put a"))
+            print(c("dim",    "  real token in config.env and accept the model licenses (see README)."))
             print()
 
-    ok, failed, skipped = [], [], []
+    ok, failed, skipped, needs_token = [], [], [], []
 
     # ── Mandatory: pyannote ────────────────────────────────────────────────
     print(c("bold", "  Mandatory - speaker diarization (installed automatically):"))
@@ -169,8 +199,8 @@ def main():
             ok.append(model_id)
             continue
         if not hf_token:
-            print(c("red", "SKIPPED (no token)"))
-            failed.append(model_id)
+            print(c("yellow", "skipped (needs token)"))
+            needs_token.append(model_id)
             continue
         print(c("yellow", "downloading..."))
         try:
@@ -178,8 +208,12 @@ def main():
             print(c("green", f"  {label}  done"))
             ok.append(model_id)
         except Exception as ex:
-            print(c("red", f"  {label}  FAILED: {ex}"))
-            failed.append(model_id)
+            if any(s in str(ex) for s in ("401", "403", "gated", "restricted", "authenticated", "Cannot access")):
+                print(c("red", f"  {label}  access denied (token invalid or license not accepted)"))
+                needs_token.append(model_id)
+            else:
+                print(c("red", f"  {label}  failed: {str(ex).splitlines()[0][:80]}"))
+                failed.append(model_id)
 
     # ── Mandatory: whisper ──────────────────────────────────────────────────
     print()
@@ -243,9 +277,14 @@ def main():
         print(c("green", f"  Ready:   {len(ok)}/{total} models"))
     if skipped:
         print(c("dim",  f"  Skipped: {', '.join(skipped)}  (optional, re-run to add)"))
+    if needs_token:
+        print(c("yellow", "  Diarization models skipped - they need an HF_TOKEN:"))
+        print(c("dim",    "    1. put a real token in config.env  (HF_TOKEN=hf_...)"))
+        print(c("dim",    "    2. accept the model licenses on huggingface.co (see README)"))
+        print(c("dim",    "    3. re-run this. Transcription already works without them."))
     if failed:
         print(c("red",   f"  Failed:  {', '.join(failed)}"))
-        print(c("yellow", "  Check HF_TOKEN, accepted licenses, and internet connection."))
+        print(c("yellow", "  Check your token, accepted licenses, and internet connection."))
     print(c("cyan", "=" * 60))
     print()
 
