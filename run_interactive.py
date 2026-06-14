@@ -684,6 +684,113 @@ def format_time(seconds):
         return f"{h:02d}:{m:02d}:{s:02d}"
     return f"{m:02d}:{s:02d}"
 
+def _read_key():
+    """Read one keypress. Returns 'up'/'down'/'enter'/'quit', 'digit:N', or None.
+    Windows uses msvcrt; POSIX uses termios. Ctrl+C raises KeyboardInterrupt."""
+    if os.name == "nt":
+        import msvcrt
+        ch = msvcrt.getch()
+        if ch in (b"\x00", b"\xe0"):            # arrow / function-key prefix
+            return {b"H": "up", b"P": "down"}.get(msvcrt.getch())
+        if ch in (b"\r", b"\n"):
+            return "enter"
+        if ch == b"\x03":
+            raise KeyboardInterrupt
+        if ch in (b"q", b"Q"):
+            return "quit"
+        if ch.isdigit():
+            return "digit:" + ch.decode("ascii")
+        return None
+    import termios, tty
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+        if ch == "\x1b":                        # ESC sequence (arrow keys)
+            return {"[A": "up", "[B": "down"}.get(sys.stdin.read(2))
+        if ch in ("\r", "\n"):
+            return "enter"
+        if ch == "\x03":
+            raise KeyboardInterrupt
+        if ch in ("q", "Q"):
+            return "quit"
+        if ch.isdigit():
+            return "digit:" + ch
+        return None
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def _menu_interactive(items, default, allow_quit):
+    """Arrow-key menu rendered in place. Returns index, or 'quit'."""
+    idx = default if 0 <= default < len(items) else 0
+    n = len(items)
+
+    def render():
+        sys.stdout.write(f"\033[{n}A")              # back to the top of the block
+        for i, it in enumerate(items):
+            sys.stdout.write("\033[2K")             # clear the line
+            if i == idx:
+                sys.stdout.write("  " + c("cyan", "› ") + c("bold", it) + "\n")
+            else:
+                sys.stdout.write("    " + c("dim", it) + "\n")
+        sys.stdout.flush()
+
+    hint = "↑/↓ move, Enter select" + (", q exit" if allow_quit else "")
+    print(c("dim", "  (" + hint + ")"))
+    for _ in range(n):
+        print()                                     # reserve the block
+    while True:
+        render()
+        key = _read_key()
+        if key == "up":
+            idx = (idx - 1) % n
+        elif key == "down":
+            idx = (idx + 1) % n
+        elif key == "enter":
+            return idx
+        elif key == "quit" and allow_quit:
+            return "quit"
+        elif key and key.startswith("digit:"):
+            d = int(key.split(":")[1])
+            if 1 <= d <= n:
+                idx = d - 1
+                render()
+                return idx
+
+
+def select_menu(items, default=0, prompt="Select", allow_quit=False):
+    """Single-choice selector.
+
+    On an interactive terminal it shows an arrow-key menu (Up/Down to move,
+    Enter to select, a digit to jump, optional q to exit) with the current row
+    highlighted. When stdin/stdout is not a TTY (piped, redirected) or the
+    platform key reader is unavailable, it falls back to a numbered list read
+    with input(), so scripted/piped runs keep working. Returns the chosen index
+    (0-based), or the string 'quit' when allow_quit and the user exits.
+    """
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        try:
+            return _menu_interactive(items, default, allow_quit)
+        except Exception:
+            pass  # any terminal/key error -> numbered fallback below
+
+    for i, it in enumerate(items, 1):
+        marker = c("green", "  [default]") if i - 1 == default else ""
+        print(f"  {c('cyan', str(i))}.  {it}{marker}")
+    qhint = ", q=exit" if allow_quit else ""
+    while True:
+        raw = input(c("bold", f"  {prompt} [{default + 1}{qhint}]: ")).strip().lower()
+        if raw == "":
+            return default
+        if allow_quit and raw in ("q", "quit", "exit"):
+            return "quit"
+        if raw.isdigit() and 1 <= int(raw) <= len(items):
+            return int(raw) - 1
+        print(c("yellow", "  Invalid choice."))
+
+
 def pick_files():
     files = sorted([f for f in INPUT_DIR.iterdir()
                     if f.is_file() and f.suffix.lower() in SUPPORTED])
@@ -693,36 +800,23 @@ def pick_files():
         input("\n  [Enter] to exit...")
         sys.exit(0)
 
-    sep = c("dim", "  " + "-" * 54)
-    print(c("bold", "  Files in input/:"))
-    print(sep)
-    for i, f in enumerate(files, 1):
-        dur      = get_duration(f)
-        dur_str  = f"  {format_duration(dur)}" if dur else ""
-        size_mb  = f.stat().st_size / 1024 / 1024
-        meta     = f"{size_mb:.1f} MB{dur_str}"
-        print(f"  {c('cyan', str(i) + '.')}  {f.name}")
-        print(c("dim", f"      {meta}"))
-        print()
-    print(sep)
-    print(f"  {c('cyan', '0.')}  Process all files")
-    print(f"  {c('cyan', 'q.')}  Exit")
-    print()
+    print(c("bold", "\n  Files in input/:\n"))
+    items = []
+    for f in files:
+        dur     = get_duration(f)
+        dur_str = f", {format_duration(dur)}" if dur else ""
+        size_mb = f.stat().st_size / 1024 / 1024
+        items.append(f"{f.name}  ({size_mb:.1f} MB{dur_str})")
+    items.append("Process all files")
+    items.append("Exit")
 
-    while True:
-        choice = input(c("bold", "  Select file number (0=all, q=exit): ")).strip().lower()
-        if choice in ("q", "quit", "exit", ""):
-            print(c("dim", "\n  Bye."))
-            sys.exit(0)
-        if choice == "0":
-            return files
-        try:
-            idx = int(choice) - 1
-            if 0 <= idx < len(files):
-                return [files[idx]]
-        except ValueError:
-            pass
-        print(c("yellow", "  Invalid choice."))
+    idx = select_menu(items, default=0, prompt="Select", allow_quit=True)
+    if idx == "quit" or idx == len(items) - 1:        # Exit
+        print(c("dim", "\n  Bye."))
+        sys.exit(0)
+    if idx == len(items) - 2:                          # Process all files
+        return files
+    return [files[idx]]
 
 def pick_model():
     available = []
@@ -744,23 +838,11 @@ def pick_model():
 
     if not options:
         print(c("yellow", "  Warning: no local models found."))
-        print(c("dim",    "  Run download_model.py to cache models locally.\n"))
+        print(c("dim",    "  Run download_models.py to cache models locally.\n"))
         options.append(("large-v3", "large-v3  (attempt download from HuggingFace)"))
 
-    for i, (key, label) in enumerate(options, 1):
-        marker = c("green", " [recommended]") if i == 1 else ""
-        print(f"  {c('cyan', str(i))}.  {label}{marker}")
-
-    print()
-    while True:
-        choice = input(c("bold", "  Model [1]: ")).strip() or "1"
-        try:
-            idx = int(choice) - 1
-            if 0 <= idx < len(options):
-                return options[idx][0]
-        except ValueError:
-            pass
-        print(c("yellow", "  Invalid choice."))
+    idx = select_menu([label for _, label in options], default=0, prompt="Model")
+    return options[idx][0]
 
 def pick_language():
     langs = [
@@ -768,19 +850,8 @@ def pick_language():
         ("",   "Auto-detect (other languages)"),
     ]
     print(c("bold", "\n  Audio language:\n"))
-    for i, (code, name) in enumerate(langs, 1):
-        marker = c("green", " [default]") if i == 1 else ""
-        print(f"  {c('cyan', str(i))}.  {name}{marker}")
-    print()
-    while True:
-        choice = input(c("bold", "  Language [1]: ")).strip() or "1"
-        try:
-            idx = int(choice) - 1
-            if 0 <= idx < len(langs):
-                return langs[idx][0] or None
-        except ValueError:
-            pass
-        print(c("yellow", "  Invalid choice."))
+    idx = select_menu([name for _, name in langs], default=0, prompt="Language")
+    return langs[idx][0] or None
 
 def pick_diarization():
     print(c("bold", "\n  Speaker diarization:\n"))
@@ -799,11 +870,10 @@ def pick_diarization():
                 print(c("dim",    "  Diarization will try to download from HuggingFace on first run"))
                 print(c("dim",    "  (needs internet + accepted license). Run download_models.py to cache it."))
                 print()
-            print(f"  {c('cyan', '1')}.  Yes - split by speaker  {c('green', '[recommended]')}")
-            print(f"  {c('cyan', '2')}.  No  - text with timestamps only")
-            print()
-            choice = input(c("bold", "  Diarization [1]: ")).strip() or "1"
-            if choice != "1":
+            idx = select_menu(
+                ["Yes - split by speaker", "No - text with timestamps only"],
+                default=0, prompt="Diarization")
+            if idx != 0:
                 return False, None, None
             print()
             raw = input(c("bold", "  Speaker count (Enter = auto): ")).strip()
