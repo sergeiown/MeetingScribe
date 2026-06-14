@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="img/meetingscribe_cover.png" alt="MeetingScribe" width="100%">
+</p>
+
 # MeetingScribe
 
 [![Останній реліз](https://img.shields.io/badge/release-v1.2.2-blue)](https://github.com/sergeiown/MeetingScribe/releases/latest)
