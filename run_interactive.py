@@ -765,8 +765,7 @@ def pick_model():
 def pick_language():
     langs = [
         ("uk", "Ukrainian"),
-        ("ru", "Russian"),
-        ("",   "Auto-detect (best for mixed uk/ru)"),
+        ("",   "Auto-detect (other languages)"),
     ]
     print(c("bold", "\n  Audio language:\n"))
     for i, (code, name) in enumerate(langs, 1):
@@ -850,7 +849,7 @@ def transcribe_file(file_path, model_size, language, total_dur):
         )
         print(c("green", " done"))
 
-        lang_map_short = {"uk": "ukr", "ru": "rus", None: "auto"}
+        lang_map_short = {"uk": "ukr", None: "auto"}
         lang_hint = lang_map_short.get(language, "auto")
         print(c("bold",  "  Transcription:\n"))
         print(c("dim", f"  Language: {lang_hint}  |  Duration: {format_duration(total_dur)}\n"))
@@ -886,7 +885,7 @@ def transcribe_file(file_path, model_size, language, total_dur):
         print()
 
         detected = info.language
-        lang_map_full = {"uk": "Ukrainian", "ru": "Russian", "en": "English"}
+        lang_map_full = {"uk": "Ukrainian", "en": "English"}
         print(c("dim", f"\n  Detected: {lang_map_full.get(detected, detected)} "
                        f"({info.language_probability:.0%})"))
         SESSION_LOG.info("Transcription: lang=%s confidence=%.0f%%  segments=%d",

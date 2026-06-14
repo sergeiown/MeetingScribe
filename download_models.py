@@ -47,7 +47,7 @@ PYANNOTE_MANDATORY = [
     ("pyannote/embedding",                      "Enrollment embedding        (~17 MB)"),
 ]
 
-# Mandatory whisper: minimal recognition model. Enough for uk/ru, smaller+faster.
+# Mandatory whisper: minimal recognition model. Enough for Ukrainian, smaller+faster.
 # Repo id matches faster-whisper's own mapping for "large-v3-turbo", so the model
 # fetched here is the same one WhisperModel would load (there is no
 # Systran/faster-whisper-large-v3-turbo repo).
