@@ -39,16 +39,25 @@ falls back to a plain transcript with timestamps.
 
 ## Requirements
 
-- Windows 10/11 (the `.bat` launchers are Windows-oriented; the Python scripts
-  themselves are cross-platform).
-- Python 3.10+ (`setup.bat` installs Python 3.12 if missing).
-- [ffmpeg](https://ffmpeg.org/) (installed automatically by `setup.bat`).
-- Python dependencies from `requirements.txt` (faster-whisper, pyannote.audio,
-  torch, numpy, huggingface_hub, ffmpeg-python).
-- A [HuggingFace](https://huggingface.co/) account and access token **for
-  diarization** (optional - without it the tool runs as plain transcription).
-- Optional: an NVIDIA GPU with CUDA for faster processing (auto-detected;
-  `setup.bat` installs the CUDA build of torch if a GPU is found).
+What you need yourself:
+
+- **Windows 10/11.** The `.bat` launchers are Windows-oriented (the Python
+  scripts themselves are cross-platform).
+- **An internet connection** for the first run (to fetch dependencies and models).
+- **Optional: a [HuggingFace](https://huggingface.co/) account and token** to
+  enable speaker diarization. Without it the tool still works as plain
+  transcription. See [Configuration](#configuration-huggingface-token).
+
+Everything else is installed automatically by `setup.bat`, you do not need to
+prepare any of it:
+
+- **Python 3.12** (only if Python is not already installed).
+- **ffmpeg**.
+- **Python dependencies** from `requirements.txt` (faster-whisper,
+  pyannote.audio, torch, numpy, huggingface_hub, ffmpeg-python).
+- The **CUDA build of torch** if an NVIDIA GPU is detected (otherwise it runs on
+  CPU). Auto-detected, nothing to configure.
+- The **models** (see [Models and licenses](#models-and-licenses)).
 
 ## Install
 
