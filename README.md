@@ -4,7 +4,7 @@
 
 # MeetingScribe
 
-[![Latest release](https://img.shields.io/badge/release-v1.2.3-blue)](https://github.com/sergeiown/MeetingScribe/releases/latest)
+[![Latest release](https://img.shields.io/badge/release-v1.2.4-blue)](https://github.com/sergeiown/MeetingScribe/releases/latest)
 
 **English** · [Українська](README.uk.md)
 
