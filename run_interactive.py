@@ -911,18 +911,33 @@ def transcribe_file(file_path, model_size, language, total_dur):
     tmp_dir = tempfile.mkdtemp()
     try:
         print(c("bold", "  Converting to WAV..."), end="", flush=True)
+        # ffmpeg/ffprobe on Windows can fail to open files with non-ASCII names
+        # (e.g. Cyrillic), so run them on an ASCII-named copy/hardlink instead.
+        src = os.path.join(tmp_dir, "source" + file_path.suffix.lower())
+        try:
+            os.link(str(file_path), src)            # instant; no extra space (same volume)
+        except OSError:
+            shutil.copyfile(str(file_path), src)    # fallback (e.g. across volumes)
         wav = os.path.join(tmp_dir, "audio.wav")
-        subprocess.run(
-            [FFMPEG or "ffmpeg", "-y", "-i", str(file_path),
+        result = subprocess.run(
+            [FFMPEG or "ffmpeg", "-y", "-i", src,
              "-ar", "16000", "-ac", "1", "-f", "wav", wav],
             capture_output=True
         )
+        if result.returncode != 0 or not os.path.exists(wav):
+            tail = (result.stderr or b"").decode("utf-8", "replace").strip().splitlines()
+            reason = "  ".join(tail[-3:]) if tail else "unknown ffmpeg error"
+            raise RuntimeError("ffmpeg could not convert the file. " + reason)
         print(c("green", " done"))
+
+        # Duration can be 0 if ffprobe could not read the original path; recompute
+        # from the ASCII copy so the progress bar and ETA work.
+        dur = total_dur if (total_dur and total_dur > 0) else get_duration(src)
 
         lang_map_short = {"uk": "ukr", None: "auto"}
         lang_hint = lang_map_short.get(language, "auto")
         print(c("bold",  "  Transcription:\n"))
-        print(c("dim", f"  Language: {lang_hint}  |  Duration: {format_duration(total_dur)}\n"))
+        print(c("dim", f"  Language: {lang_hint}  |  Duration: {format_duration(dur)}\n"))
 
         _PROG[0] = 0
 
@@ -942,7 +957,7 @@ def transcribe_file(file_path, model_size, language, total_dur):
 
         for seg in segments:
             results.append(seg)
-            progress_bar(seg.end, total_dur, label=seg.text.strip()[:58], start_time=t0_transcribe)
+            progress_bar(seg.end, dur, label=seg.text.strip()[:58], start_time=t0_transcribe)
             if seg.start - last_ts >= 30:
                 lines.append(f"\n{format_time(seg.start)}")
                 last_ts = seg.start
@@ -950,7 +965,7 @@ def transcribe_file(file_path, model_size, language, total_dur):
             if text:
                 lines.append(text)
 
-        progress_bar(total_dur, total_dur, label="done")
+        progress_bar(dur, dur, label="done")
         _PROG[0] = 0
         print()
 
