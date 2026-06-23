@@ -892,6 +892,10 @@ def pick_diarization():
         input(c("dim", "  [Enter] continue without diarization..."))
         return False, None, None
 
+class MediaError(Exception):
+    """Input file could not be read or converted (corrupted, incomplete, or unsupported)."""
+
+
 def transcribe_file(file_path, model_size, language, total_dur):
     from faster_whisper import WhisperModel
 
@@ -926,8 +930,13 @@ def transcribe_file(file_path, model_size, language, total_dur):
         )
         if result.returncode != 0 or not os.path.exists(wav):
             tail = (result.stderr or b"").decode("utf-8", "replace").strip().splitlines()
-            reason = "  ".join(tail[-3:]) if tail else "unknown ffmpeg error"
-            raise RuntimeError("ffmpeg could not convert the file. " + reason)
+            detail = "  ".join(tail[-3:]) if tail else "unknown ffmpeg error"
+            SESSION_LOG.warning("ffmpeg could not convert %s: %s", file_path.name, detail)
+            low = detail.lower()
+            if any(s in low for s in ("invalid data", "moov atom", "error opening input",
+                                      "end of file", "could not find codec", "does not contain")):
+                raise MediaError("file looks corrupted, incomplete, or not a valid media file")
+            raise MediaError("ffmpeg could not read this file")
         print(c("green", " done"))
 
         # Duration can be 0 if ffprobe could not read the original path; recompute
@@ -1100,6 +1109,13 @@ def main():
                 print(c("dim",   f"  Processing time: {format_duration(elapsed)}\n"))
                 SESSION_LOG.info("Done: %s  elapsed=%s", out.name, format_duration(elapsed))
 
+            except MediaError as me:
+                elapsed = time.time() - t_start
+                print(c("yellow", f"\n  Skipped: {me}."))
+                print(c("dim",    "  (make sure the recording finished and opens in a media player)"))
+                SESSION_LOG.warning("Skipped (media error): %s  %s  elapsed=%s",
+                                    f.name, me, format_duration(elapsed))
+                print()
             except Exception as e:
                 import traceback
                 elapsed = time.time() - t_start
