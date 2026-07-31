@@ -21,6 +21,10 @@ API, аудіо ніколи не залишає комп'ютер.
 
 ## Як це працює
 
+<p align="center">
+  <img src="img/structure_ua.svg" alt="Конвеєр MeetingScribe" width="720">
+</p>
+
 1. Кладеш аудіо/відео файли в папку `input/` і запускаєш інструмент.
 2. faster-whisper транскрибує мовлення.
 3. pyannote `speaker-diarization-3.1` розділяє аудіо на репліки спікерів.
