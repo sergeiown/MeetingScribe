@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="img/meetingscribe_cover.png" alt="MeetingScribe" width="100%">
+  <img src="img/meetingscribe_cover.png" alt="MeetingScribe" width="720">
 </p>
 
 # MeetingScribe
@@ -8,7 +8,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/sergeiown/MeetingScribe/blob/main/LICENSE)
 [![Release](https://img.shields.io/github/v/release/sergeiown/MeetingScribe)](https://github.com/sergeiown/MeetingScribe/releases/latest)
 
-[English](README.md) · **Українська**
+[![English](https://img.shields.io/badge/-English-lightgrey)](README.md)
+[![Українська](https://img.shields.io/badge/-%D0%A3%D0%BA%D1%80%D0%B0%D1%97%D0%BD%D1%81%D1%8C%D0%BA%D0%B0-blue)](README.uk.md)
 
 Локальне перетворення мовлення в текст із діаризацією спікерів і розпізнаванням
 відомих голосів. Усе працює на твоїй машині через
