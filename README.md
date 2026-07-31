@@ -20,6 +20,10 @@ automatic language detection (Whisper is multilingual, so other languages work t
 
 ## How it works
 
+<p align="center">
+  <img src="img/structure.svg" alt="MeetingScribe pipeline" width="720">
+</p>
+
 1. You drop audio/video files into the `input/` folder and run the tool.
 2. faster-whisper transcribes the speech.
 3. pyannote `speaker-diarization-3.1` splits the audio into speaker turns.
