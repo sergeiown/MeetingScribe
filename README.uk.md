@@ -4,7 +4,9 @@
 
 # MeetingScribe
 
-[![Останній реліз](https://img.shields.io/badge/release-v1.2.4-blue)](https://github.com/sergeiown/MeetingScribe/releases/latest)
+[![Windows](https://img.shields.io/badge/platform-windows-0078D6?logo=windows&logoColor=white)](https://en.wikipedia.org/wiki/List_of_Microsoft_Windows_versions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/sergeiown/MeetingScribe/blob/main/LICENSE)
+[![Release](https://img.shields.io/github/v/release/sergeiown/MeetingScribe)](https://github.com/sergeiown/MeetingScribe/releases/latest)
 
 [English](README.md) · **Українська**
 
