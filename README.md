@@ -142,6 +142,19 @@ the model licenses accepted.
 
 `.webm` `.mp4` `.mkv` `.mov` `.avi` `.m4a` `.mp3` `.wav`
 
+## Recording tip
+
+For the cleanest results, record with [OBS Studio](https://obsproject.com) (free
+and open-source). Optimal audio settings:
+
+- **Settings → Audio → Sample Rate:** 44.1 kHz
+- **Settings → Audio → Channels:** Mono
+- **Settings → Output → Recording Format:** MP4
+
+Mono speech is all the tool needs (it downmixes to 16 kHz mono internally) and it
+keeps files small. Stop the recording properly so the file finalizes (an
+unfinished recording can be unreadable).
+
 ## Output format
 
 Plain text, one block per speaker turn:
