@@ -244,7 +244,40 @@ def progress_bar(current, total, width=40, label="", start_time=None):
 _DIARZ_LINE = [False]
 _DIARZ_T0   = [None]
 
+class Cancelled(Exception):
+    """User pressed ESC and confirmed stopping the run."""
+
+
+def _esc_pressed():
+    """Non-blocking check for an ESC keypress (Windows console); drains other keys."""
+    if os.name != "nt":
+        return False
+    try:
+        import msvcrt
+        hit = False
+        while msvcrt.kbhit():
+            ch = msvcrt.getch()
+            if ch in (b"\x00", b"\xe0"):   # arrow/function key: consume the second byte
+                msvcrt.getch()
+            elif ch == b"\x1b":            # ESC
+                hit = True
+        return hit
+    except Exception:
+        return False
+
+
+def _confirm_cancel():
+    """ESC was pressed; ask whether to stop. Returns True to stop."""
+    try:
+        ans = input(c("yellow", "\n  ESC pressed - stop and cancel? [y/N]: ")).strip().lower()
+    except EOFError:
+        return False
+    return ans in ("y", "yes")
+
+
 def _diarize_hook(step_name, step_artifact, file=None, total=None, completed=None):
+    if _esc_pressed() and _confirm_cancel():
+        raise Cancelled()
     if total is None or completed is None or total == 0:
         return
     if _DIARZ_T0[0] is None:
@@ -946,7 +979,7 @@ def transcribe_file(file_path, model_size, language, total_dur):
         lang_map_short = {"uk": "ukr", None: "auto"}
         lang_hint = lang_map_short.get(language, "auto")
         print(c("bold",  "  Transcription:\n"))
-        print(c("dim", f"  Language: {lang_hint}  |  Duration: {format_duration(dur)}\n"))
+        print(c("dim", f"  Language: {lang_hint}  |  Duration: {format_duration(dur)}   (press ESC to cancel)\n"))
 
         _PROG[0] = 0
 
@@ -965,6 +998,8 @@ def transcribe_file(file_path, model_size, language, total_dur):
         t0_transcribe = time.time()
 
         for seg in segments:
+            if _esc_pressed() and _confirm_cancel():
+                raise Cancelled()
             results.append(seg)
             progress_bar(seg.end, dur, label=seg.text.strip()[:58], start_time=t0_transcribe)
             if seg.start - last_ts >= 30:
@@ -1085,6 +1120,8 @@ def main():
                             lines.append(txt)
                         text = "\n".join(lines).strip()
                         SESSION_LOG.info("Diarization: %d speakers", len(spk_map))
+                    except Cancelled:
+                        raise
                     except Exception as de:
                         import traceback as _tb
                         err_str = str(de)
@@ -1109,6 +1146,11 @@ def main():
                 print(c("dim",   f"  Processing time: {format_duration(elapsed)}\n"))
                 SESSION_LOG.info("Done: %s  elapsed=%s", out.name, format_duration(elapsed))
 
+            except Cancelled:
+                print(c("yellow", "\n  Cancelled by user. Stopping."))
+                SESSION_LOG.info("Cancelled by user during: %s", f.name)
+                print()
+                break
             except MediaError as me:
                 elapsed = time.time() - t_start
                 print(c("yellow", f"\n  Skipped: {me}."))
@@ -1139,4 +1181,9 @@ def main():
     input("  [Enter] to exit...")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        _set_sleep_prevention(False)
+        print(c("yellow", "\n  Interrupted."))
+        sys.exit(0)
