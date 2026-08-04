@@ -48,6 +48,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 # torch on Windows has no triton; silence its W-level log spam (flop_counter etc.)
 os.environ.setdefault("TORCH_CPP_LOG_LEVEL", "ERROR")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")   # hide HF Hub's "unauthenticated requests" notice
 logging.getLogger("torch").setLevel(logging.ERROR)
 
 print("[*] Initializing transcription engine...", flush=True)

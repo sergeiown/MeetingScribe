@@ -26,6 +26,7 @@ if hasattr(sys.stdout, "reconfigure"):
 # turn off its tqdm progress bars (they interleave with our lines, and the
 # "unauthenticated requests" notice rides on one of them) and lower its logging.
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")   # hide the "unauthenticated requests" notice
 import logging
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
