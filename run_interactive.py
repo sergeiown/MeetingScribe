@@ -872,7 +872,7 @@ def pick_model():
     if not options:
         print(c("yellow", "  Warning: no local models found."))
         print(c("dim",    "  Run download_models.py to cache models locally.\n"))
-        options.append(("large-v3", "large-v3  (attempt download from HuggingFace)"))
+        options.append(("small", "small  (attempt download from HuggingFace)"))
 
     idx = select_menu([label for _, label in options], default=0, prompt="Model")
     return options[idx][0]
