@@ -859,23 +859,33 @@ def pick_model():
             if d.is_dir() and (d / "model.bin").exists():
                 available.append(d.name)
 
-    print(c("bold", "\n  Recognition model:\n"))
-    options = []
-    if "large-v3-turbo" in available:
-        options.append(("large-v3-turbo", "large-v3-turbo (fast + accurate, ~1.6GB)"))
-    if "large-v3" in available:
-        options.append(("large-v3", "large-v3       (best accuracy, ~3GB, slower)"))
-    if "medium" in available:
-        options.append(("medium",   "medium         (faster, ~1.5GB)"))
-    if "small" in available:
-        options.append(("small",    "small          (fastest, ~480MB)"))
+    # Heaviest / most accurate first, lightest last.
+    catalog = [
+        ("large-v3",       "large-v3 (best accuracy, ~3 GB, slower)"),
+        ("large-v3-turbo", "large-v3-turbo (fast + accurate, ~1.6 GB)"),
+        ("medium",         "medium (~1.5 GB)"),
+        ("small",          "small (fastest, ~460 MB)"),
+    ]
+    options = [(k, l) for k, l in catalog if k in available]
 
     if not options:
         print(c("yellow", "  Warning: no local models found."))
         print(c("dim",    "  Run download_models.py to cache models locally.\n"))
-        options.append(("small", "small  (attempt download from HuggingFace)"))
+        options.append(("small", "small (attempt download from HuggingFace)"))
 
-    idx = select_menu([label for _, label in options], default=0, prompt="Model")
+    # Recommend the heaviest model on a GPU, the lightest on CPU.
+    device, _, device_name = _detect_device()
+    default = 0 if device == "cuda" else len(options) - 1
+
+    print(c("bold", "\n  Recognition model:"))
+    if device == "cuda":
+        print(c("dim", f"  GPU detected ({device_name}); the heaviest model is recommended.\n"))
+    else:
+        print(c("dim", "  Running on CPU; the lightest model is recommended.\n"))
+
+    labels = [label for _, label in options]
+    labels[default] += "  [recommended]"
+    idx = select_menu(labels, default=default, prompt="Model")
     return options[idx][0]
 
 def pick_language():
