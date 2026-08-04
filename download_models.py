@@ -55,17 +55,17 @@ PYANNOTE_MANDATORY = [
     ("pyannote/embedding",                      "Enrollment embedding        (~17 MB)"),
 ]
 
-# Mandatory whisper: minimal recognition model. Enough for Ukrainian, smaller+faster.
-# Repo id matches faster-whisper's own mapping for "large-v3-turbo", so the model
-# fetched here is the same one WhisperModel would load (there is no
-# Systran/faster-whisper-large-v3-turbo repo).
+# Mandatory whisper: a light, fast, multilingual model. "small" handles Ukrainian
+# well enough and is far smaller than the large models (offered as optional below).
 WHISPER_MANDATORY = [
-    ("large-v3-turbo", "mobiuslabsgmbh/faster-whisper-large-v3-turbo", "large-v3-turbo (~1.6 GB)"),
+    ("small", "Systran/faster-whisper-small", "small (~460 MB, fast, multilingual incl. Ukrainian)"),
 ]
 
-# Optional whisper: heavier, higher accuracy.
+# Optional whisper: heavier, higher accuracy. Repo ids match faster-whisper's own
+# mapping (there is no Systran/faster-whisper-large-v3-turbo repo).
 WHISPER_OPTIONAL = [
-    ("large-v3", "Systran/faster-whisper-large-v3", "large-v3 (~3 GB, higher accuracy, slower)"),
+    ("large-v3-turbo", "mobiuslabsgmbh/faster-whisper-large-v3-turbo", "large-v3-turbo (~1.6 GB, higher accuracy)"),
+    ("large-v3",       "Systran/faster-whisper-large-v3",              "large-v3 (~3 GB, best accuracy, slower)"),
 ]
 
 

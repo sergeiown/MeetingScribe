@@ -86,8 +86,10 @@ setup.bat
 
 Воно перевіряє/встановлює Python, ffmpeg і Python-залежності, виявляє NVIDIA GPU
 і ставить CUDA-збірку torch за наявності, готує `config.env`, нагадує про
-ліцензії моделей HuggingFace і завантажує моделі. Завершується підсумком і чекає
-натискання клавіші.
+ліцензії моделей HuggingFace і завантажує моделі: обовʼязкова легка модель
+(Whisper `small`, ~460 МБ) ставиться автоматично, а щодо опційних моделей вищої
+точності (`large-v3-turbo`, `large-v3`) установник запитає. Завершується
+підсумком і чекає натискання клавіші.
 
 Щоб (пере)завантажити моделі окремо:
 
@@ -198,14 +200,15 @@ HuggingFace із прийнятими ліцензіями.
 
 | Модель | Сторінка | Примітки |
 |---|---|---|
-| `Systran/faster-whisper-large-v3-turbo` | <https://hf.co/Systran/faster-whisper-large-v3-turbo> | **Обовʼязкова** - модель за замовчуванням (~1.6 ГБ) |
-| `Systran/faster-whisper-large-v3` | <https://hf.co/Systran/faster-whisper-large-v3> | **Опційна** - вища точність (~3 ГБ, повільніша) |
+| `Systran/faster-whisper-small` | <https://hf.co/Systran/faster-whisper-small> | **Обовʼязкова** - легка, швидка, мультимовна (~460 МБ) |
+| `mobiuslabsgmbh/faster-whisper-large-v3-turbo` | <https://hf.co/mobiuslabsgmbh/faster-whisper-large-v3-turbo> | **Опційна** - вища точність (~1.6 ГБ) |
+| `Systran/faster-whisper-large-v3` | <https://hf.co/Systran/faster-whisper-large-v3> | **Опційна** - найвища точність (~3 ГБ, повільніша) |
 
 Базова модель Whisper - від OpenAI (<https://github.com/openai/whisper>),
 випущена під ліцензією MIT.
 
-**Обовʼязковий набір:** чотири моделі pyannote плюс Whisper `large-v3-turbo`.
-**Опційний набір:** Whisper `large-v3`.
+**Обовʼязковий набір:** чотири моделі pyannote плюс Whisper `small`.
+**Опційний набір:** Whisper `large-v3-turbo` та `large-v3`.
 
 ## Зібрано на основі
 

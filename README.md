@@ -83,8 +83,10 @@ setup.bat
 
 It checks/installs Python, ffmpeg and the Python dependencies, detects an NVIDIA
 GPU and installs the CUDA build of torch if present, prepares `config.env`,
-reminds you about the HuggingFace model licenses, and downloads the models. It
-ends with a summary and waits for a keypress.
+reminds you about the HuggingFace model licenses, and downloads the models: the
+mandatory light model (Whisper `small`, ~460 MB) installs automatically, and it
+asks whether you also want the optional higher-accuracy models
+(`large-v3-turbo`, `large-v3`). It ends with a summary and waits for a keypress.
 
 To (re-)download models separately:
 
@@ -195,14 +197,15 @@ Public repositories, downloaded under their own terms:
 
 | Model | Page | Notes |
 |---|---|---|
-| `Systran/faster-whisper-large-v3-turbo` | <https://hf.co/Systran/faster-whisper-large-v3-turbo> | **Mandatory** - default model (~1.6 GB) |
-| `Systran/faster-whisper-large-v3` | <https://hf.co/Systran/faster-whisper-large-v3> | **Optional** - higher accuracy (~3 GB, slower) |
+| `Systran/faster-whisper-small` | <https://hf.co/Systran/faster-whisper-small> | **Mandatory** - light, fast, multilingual (~460 MB) |
+| `mobiuslabsgmbh/faster-whisper-large-v3-turbo` | <https://hf.co/mobiuslabsgmbh/faster-whisper-large-v3-turbo> | **Optional** - higher accuracy (~1.6 GB) |
+| `Systran/faster-whisper-large-v3` | <https://hf.co/Systran/faster-whisper-large-v3> | **Optional** - best accuracy (~3 GB, slower) |
 
 The underlying Whisper model is by OpenAI
 (<https://github.com/openai/whisper>), released under the MIT license.
 
-**Mandatory set:** the four pyannote models plus Whisper `large-v3-turbo`.
-**Optional set:** Whisper `large-v3`.
+**Mandatory set:** the four pyannote models plus Whisper `small`.
+**Optional set:** Whisper `large-v3-turbo` and `large-v3`.
 
 ## Built with
 
