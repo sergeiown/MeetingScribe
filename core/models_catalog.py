@@ -57,6 +57,16 @@ PYANNOTE_MODELS = [
               "Used to enroll and recognize your saved, known speakers.", True),
 ]
 
+# These four are never useful individually - diarization needs all of
+# them together - so the Settings > Models UI offers them as one combined
+# download rather than four separate ones. ~55 MB is the sum of the
+# individual sizes above.
+DIARIZATION_BUNDLE_LABEL = "Diarization models"
+DIARIZATION_BUNDLE_SIZE = "~55 MB"
+DIARIZATION_BUNDLE_DESCRIPTION = (
+    "Everything needed for speaker diarization: the pipeline, "
+    "segmentation, voice fingerprinting, and speaker enrollment.")
+
 
 def is_whisper_installed(size: str, models_dir: Path = MODELS_DIR) -> bool:
     model_bin = models_dir / size / "model.bin"
@@ -75,6 +85,10 @@ def is_pyannote_installed(model_id: str, models_dir: Path = MODELS_DIR) -> bool:
         if f.is_file() and f.name in key_names and f.stat().st_size > 64:
             return True
     return False
+
+
+def is_diarization_complete(models_dir: Path = MODELS_DIR) -> bool:
+    return all(is_pyannote_installed(spec.key, models_dir) for spec in PYANNOTE_MODELS)
 
 
 def installed_whisper_sizes(models_dir: Path = MODELS_DIR) -> list:
@@ -200,3 +214,30 @@ def download_pyannote_model(model_id: str, hf_token: str, *,
                           local_dir=str(local_dir), ignore_patterns=_IGNORE_PATTERNS)
 
     _run_with_progress(do_download, local_dir, total, cancel_token, on_progress)
+
+
+def download_diarization_models(hf_token: str, *, models_dir: Path = MODELS_DIR,
+                                  cancel_token: Optional[CancelToken] = None,
+                                  on_progress: Optional[ProgressFn] = None) -> None:
+    """Downloads every PYANNOTE_MODELS entry as one combined operation with
+    a single overall progress fraction - they're only useful installed
+    together, so the UI offers them as one download, not four."""
+    to_fetch = [s for s in PYANNOTE_MODELS if not is_pyannote_installed(s.key, models_dir)]
+    if not to_fetch:
+        return
+    sizes = [_repo_total_bytes(s.hf_repo, hf_token) for s in to_fetch]
+    total = sum(sizes) or 1
+    bytes_before = 0
+    for spec, size in zip(to_fetch, sizes):
+        if cancel_token:
+            cancel_token.check()
+
+        def relay(current, _sub_total, label, bytes_before=bytes_before):
+            if on_progress:
+                on_progress(bytes_before + current, total, label)
+
+        download_pyannote_model(spec.key, hf_token, models_dir=models_dir,
+                                cancel_token=cancel_token, on_progress=relay)
+        bytes_before += size
+    if on_progress:
+        on_progress(float(total), float(total), "done")

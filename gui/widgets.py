@@ -65,7 +65,7 @@ class ModelRowWidget(QFrame):
         top_row.addWidget(self._status_label)
 
         self._progress = QProgressBar()
-        self._progress.setMaximumWidth(150)
+        self._progress.setMinimumWidth(220)
         self._progress.setVisible(False)
         top_row.addWidget(self._progress)
 
@@ -84,6 +84,7 @@ class ModelRowWidget(QFrame):
 
     def set_installed(self, installed: bool):
         self._status_label.setText(tr("Installed") if installed else tr("Not installed"))
+        self._status_label.setVisible(True)
         self._download_btn.setVisible(not installed)
         self._progress.setVisible(False)
 
@@ -96,6 +97,10 @@ class ModelRowWidget(QFrame):
         if not self._progress.isVisible():
             self._download_start_time = time.time()
         self._download_btn.setVisible(False)
+        # Hides the static "Not installed" text while the bar (which shows
+        # its own %/ETA text) is up - both together were competing for the
+        # same cramped space and clipping the ETA off the edge of the card.
+        self._status_label.setVisible(False)
         self._progress.setVisible(True)
         if total > 0:
             pct = min(current / total, 1.0)
@@ -119,3 +124,4 @@ class ModelRowWidget(QFrame):
         else:
             self._download_btn.setVisible(True)
             self._status_label.setText(tr("Failed: {error}", error=error[:60]) if error else tr("Failed"))
+            self._status_label.setVisible(True)

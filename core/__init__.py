@@ -19,7 +19,10 @@ import os
 os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
 from .version import VERSION, GITHUB_REPO
-from .update_check import check_for_update
+from .update_check import (
+    check_for_update, download_installer, cleanup_update_downloads,
+    spawn_installer, UPDATE_DOWNLOAD_DIR,
+)
 from .paths import (
     SCRIPT_DIR, INPUT_DIR, OUTPUT_DIR, MODELS_DIR, LOGS_DIR, SPEAKERS_DIR, SAMPLES_DIR,
     SUPPORTED_EXTENSIONS, ensure_workdirs,
@@ -48,9 +51,10 @@ from .speakers import (
 )
 from .models_catalog import (
     ModelSpec, WHISPER_MODELS, PYANNOTE_MODELS,
-    installed_whisper_sizes, is_whisper_installed, is_pyannote_installed,
+    DIARIZATION_BUNDLE_LABEL, DIARIZATION_BUNDLE_SIZE, DIARIZATION_BUNDLE_DESCRIPTION,
+    installed_whisper_sizes, is_whisper_installed, is_pyannote_installed, is_diarization_complete,
     recommend_whisper_model, download_whisper_model, download_pyannote_model,
-    whisper_model_bytes,
+    download_diarization_models, whisper_model_bytes,
 )
 from .config_env import (
     read_config_env, write_config_env, read_hf_token,
@@ -60,6 +64,7 @@ from .results import save_result, save_segments, load_segments, file_status
 
 __all__ = [
     "VERSION", "GITHUB_REPO", "check_for_update",
+    "download_installer", "cleanup_update_downloads", "spawn_installer", "UPDATE_DOWNLOAD_DIR",
     "SCRIPT_DIR", "INPUT_DIR", "OUTPUT_DIR", "MODELS_DIR", "LOGS_DIR", "SPEAKERS_DIR", "SAMPLES_DIR",
     "SUPPORTED_EXTENSIONS", "ensure_workdirs",
     "init_logger", "log_ml_versions",
@@ -79,9 +84,10 @@ __all__ = [
     "delete_speaker_version", "delete_speaker_person", "rename_speaker_person",
     "export_speakers", "import_speakers",
     "ModelSpec", "WHISPER_MODELS", "PYANNOTE_MODELS",
-    "installed_whisper_sizes", "is_whisper_installed", "is_pyannote_installed",
+    "DIARIZATION_BUNDLE_LABEL", "DIARIZATION_BUNDLE_SIZE", "DIARIZATION_BUNDLE_DESCRIPTION",
+    "installed_whisper_sizes", "is_whisper_installed", "is_pyannote_installed", "is_diarization_complete",
     "recommend_whisper_model", "download_whisper_model", "download_pyannote_model",
-    "whisper_model_bytes",
+    "download_diarization_models", "whisper_model_bytes",
     "read_config_env", "write_config_env", "read_hf_token",
     "has_diarization_support", "is_diar_pipeline_cached",
     "save_result", "save_segments", "load_segments", "file_status",

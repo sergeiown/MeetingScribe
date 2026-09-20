@@ -46,7 +46,7 @@ class ModelsTab(QWidget):
         scroll.setWidget(content)
         outer_layout.addWidget(scroll)
 
-        self._rows = {}  # key -> (ModelRowWidget, ModelSpec, is_pyannote)
+        self._rows = {}  # key -> (ModelRowWidget, ModelSpec), Whisper models only
         self._active_downloads = []  # keeps (thread, worker) alive while running
 
         rec_box = QGroupBox(tr("Recognition (Whisper)"))
@@ -54,9 +54,9 @@ class ModelsTab(QWidget):
         rec_layout.setSpacing(10)
         for spec in core.WHISPER_MODELS:
             row = ModelRowWidget(spec.label, spec.size, spec.description, core.is_whisper_installed(spec.key))
-            row.download_requested.connect(lambda s=spec: self._start_download(s, False))
+            row.download_requested.connect(lambda s=spec: self._start_download(s))
             rec_layout.addWidget(row)
-            self._rows[spec.key] = (row, spec, False)
+            self._rows[spec.key] = (row, spec)
         layout.addWidget(rec_box)
 
         diar_box = QGroupBox(tr("Diarization (pyannote)"))
@@ -87,11 +87,15 @@ class ModelsTab(QWidget):
         token_row.addWidget(save_token_btn)
         diar_layout.addLayout(token_row)
 
-        for spec in core.PYANNOTE_MODELS:
-            row = ModelRowWidget(spec.label, spec.size, spec.description, core.is_pyannote_installed(spec.key))
-            row.download_requested.connect(lambda s=spec: self._start_download(s, True))
-            diar_layout.addWidget(row)
-            self._rows[spec.key] = (row, spec, True)
+        # The four pyannote models are never useful individually -
+        # diarization needs all of them together - so they're offered as
+        # one combined download instead of four separate buttons/progress
+        # bars (which also left too little width for the "% - ETA" text).
+        self._diarization_row = ModelRowWidget(
+            core.DIARIZATION_BUNDLE_LABEL, core.DIARIZATION_BUNDLE_SIZE,
+            core.DIARIZATION_BUNDLE_DESCRIPTION, core.is_diarization_complete())
+        self._diarization_row.download_requested.connect(self._start_diarization_download)
+        diar_layout.addWidget(self._diarization_row)
         layout.addWidget(diar_box)
         layout.addStretch()
 
@@ -99,9 +103,7 @@ class ModelsTab(QWidget):
 
     def refresh_token_state(self):
         has_token = bool(core.read_hf_token())
-        for row, spec, is_pyannote in self._rows.values():
-            if is_pyannote:
-                row.set_needs_token(not has_token)
+        self._diarization_row.set_needs_token(not has_token)
 
     def _toggle_token_visibility(self, checked):
         self._token_edit.setEchoMode(QLineEdit.Normal if checked else QLineEdit.Password)
@@ -115,16 +117,24 @@ class ModelsTab(QWidget):
         core.write_config_env({"HF_TOKEN": self._token_edit.text().strip()})
         self.refresh_token_state()
 
-    def _start_download(self, spec, is_pyannote):
+    def _start_download(self, spec):
         token = core.read_hf_token()
-        if is_pyannote:
-            def fn(ct, on_progress, spec=spec, token=token):
-                core.download_pyannote_model(spec.key, token, cancel_token=ct, on_progress=on_progress)
-        else:
-            def fn(ct, on_progress, spec=spec, token=token):
-                core.download_whisper_model(spec.key, spec.hf_repo, token, cancel_token=ct, on_progress=on_progress)
 
-        row, _, _ = self._rows[spec.key]
+        def fn(ct, on_progress, spec=spec, token=token):
+            core.download_whisper_model(spec.key, spec.hf_repo, token, cancel_token=ct, on_progress=on_progress)
+
+        row, _ = self._rows[spec.key]
+        self._run_download(row, fn)
+
+    def _start_diarization_download(self):
+        token = core.read_hf_token()
+
+        def fn(ct, on_progress, token=token):
+            core.download_diarization_models(token, cancel_token=ct, on_progress=on_progress)
+
+        self._run_download(self._diarization_row, fn)
+
+    def _run_download(self, row, fn):
         thread = QThread()
         worker = ModelDownloadWorker(fn)
         worker.moveToThread(thread)
