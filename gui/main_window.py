@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem,
     QPushButton, QComboBox, QCheckBox, QLabel, QProgressBar, QTextEdit,
-    QFileDialog, QMessageBox, QSpinBox,
+    QFileDialog, QMessageBox, QSpinBox, QToolTip,
 )
 
 from .device_prefs import get_device_preference
@@ -187,6 +187,7 @@ class MainWindow(QMainWindow):
         self._diarize_checkbox = QCheckBox(tr("Automatically identify speakers\nafter recognition"))
         self._diarize_checkbox.setChecked(
             QSettings("MeetingScribe", "MeetingScribe").value("diarize_default", True, type=bool))
+        self._diarize_checkbox.clicked.connect(self._on_diarize_checkbox_clicked)
         diar_layout.addWidget(self._diarize_checkbox)
         speaker_count_row = QHBoxLayout()
         speaker_count_row.setContentsMargins(22, 0, 0, 0)
@@ -200,15 +201,6 @@ class MainWindow(QMainWindow):
         speaker_count_row.addWidget(self._num_speakers_spin)
         speaker_count_row.addStretch()
         diar_layout.addLayout(speaker_count_row)
-
-        # A hover-only tooltip on the checkbox is easy to miss - this is
-        # the same explanation, always visible, so "why is this greyed out"
-        # doesn't require hovering to discover.
-        self._diarize_hint = QLabel()
-        self._diarize_hint.setProperty("hint", True)
-        self._diarize_hint.setWordWrap(True)
-        self._diarize_hint.setVisible(False)
-        diar_layout.addWidget(self._diarize_hint)
 
         col.addWidget(self._diar_box)
 
@@ -389,32 +381,42 @@ class MainWindow(QMainWindow):
         # since a fresh install commonly has neither yet.
         models_missing = has_package and not all(
             core.is_pyannote_installed(spec.key) for spec in core.PYANNOTE_MODELS)
-        available = has_package and has_token and not models_missing
+        # Cached for _on_diarize_checkbox_clicked: the checkbox stays
+        # enabled even when unavailable (see there for why), so this is the
+        # only record of whether a click should actually be allowed to stick.
+        self._diarize_available = has_package and has_token and not models_missing
+        self._diarize_unavailable_reason = self._diarize_unavailable_message(
+            has_package, has_token, models_missing)
 
-        self._diarize_checkbox.setEnabled(available)
-        self._num_speakers_spin.setEnabled(available)
-        if available:
-            self._diarize_checkbox.setToolTip("")
-            self._diarize_hint.setVisible(False)
-        else:
+        if not self._diarize_available:
             self._diarize_checkbox.setChecked(False)
-            message = self._diarize_unavailable_message(has_package, has_token, models_missing)
-            self._diarize_checkbox.setToolTip(message)
-            # A visible hint, not just a hover-only tooltip - "why is this
-            # greyed out" shouldn't require hovering to discover.
-            self._diarize_hint.setText(message)
-            self._diarize_hint.setVisible(True)
-            if models_missing and models_missing != self._diarize_models_missing_notified:
-                # A distinct, more visible nudge than the passive hover
-                # tooltip above - specifically for "everything else is set
-                # up, you just haven't downloaded the models yet", since
-                # that's an easy one-click fix (unlike the token case, which
-                # needs the user to go get one from HuggingFace first).
-                from PySide6.QtWidgets import QToolTip
-                pos = self._diarize_checkbox.mapToGlobal(self._diarize_checkbox.rect().topLeft())
-                QToolTip.showText(pos, message, self._diarize_checkbox)
+        self._diarize_checkbox.setToolTip(self._diarize_unavailable_reason)
+        self._num_speakers_spin.setEnabled(
+            self._diarize_available and self._diarize_checkbox.isChecked())
+
+        if models_missing and models_missing != self._diarize_models_missing_notified:
+            # A distinct, more visible nudge than the passive hover tooltip
+            # above - specifically for "everything else is set up, you just
+            # haven't downloaded the models yet", since that's an easy
+            # one-click fix (unlike the token case, which needs the user to
+            # go get one from HuggingFace first).
+            pos = self._diarize_checkbox.mapToGlobal(self._diarize_checkbox.rect().topLeft())
+            QToolTip.showText(pos, self._diarize_unavailable_reason, self._diarize_checkbox)
         self._diarize_models_missing_notified = models_missing
         self._refresh_diarize_button()
+
+    def _on_diarize_checkbox_clicked(self, checked):
+        """The checkbox stays enabled even when diarization isn't available
+        yet (a disabled QCheckBox never emits clicked at all, so there'd be
+        no way to explain why) - clicking it while unavailable snaps it back
+        unchecked and pops up the explanation right there, instead of a
+        passive label sitting under it regardless of whether anyone looks."""
+        if checked and not self._diarize_available:
+            self._diarize_checkbox.setChecked(False)
+            pos = self._diarize_checkbox.mapToGlobal(self._diarize_checkbox.rect().bottomLeft())
+            QToolTip.showText(pos, self._diarize_unavailable_reason, self._diarize_checkbox)
+            return
+        self._num_speakers_spin.setEnabled(checked)
 
     def _refresh_diarize_button(self):
         """The "Identify speakers" button only makes sense once a file has
