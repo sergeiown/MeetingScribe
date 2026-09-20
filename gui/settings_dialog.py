@@ -410,7 +410,7 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Settings"))
-        self.resize(720, 620)
+        self.resize(780, 520)
         layout = QVBoxLayout(self)
 
         tabs = QTabWidget()
