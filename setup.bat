@@ -4,14 +4,14 @@ chcp 65001 >nul
 cd /d "%~dp0"
 
 rem Working folders (all git-ignored) so the user has somewhere to drop files
-rem right after setup, before run.bat is ever launched.
+rem right after setup, before the app is ever launched.
 if not exist input mkdir input
 if not exist output mkdir output
 if not exist logs mkdir logs
 set LOG=logs\setup.log
 echo === Setup started %DATE% %TIME% > %LOG%
 
-echo [1/7] Checking Python...
+echo [1/5] Checking Python...
 python --version >nul 2>&1
 if errorlevel 1 (
     echo Python not found. Installing via winget...
@@ -20,6 +20,7 @@ if errorlevel 1 (
     if errorlevel 1 (
         echo ERROR: Auto-install failed. Install manually: https://python.org
         echo Python: install FAILED >> %LOG%
+        set SETUP_FAILED=1
         goto :done
     )
     set "PATH=%LOCALAPPDATA%\Programs\Python\Python312;%LOCALAPPDATA%\Programs\Python\Python312\Scripts;%PATH%"
@@ -27,6 +28,7 @@ if errorlevel 1 (
     if errorlevel 1 (
         echo Python installed but PATH not updated. Close this window and run setup.bat again.
         echo Python: installed, PATH not updated - manual restart needed >> %LOG%
+        set SETUP_FAILED=1
         goto :done
     )
     echo Python ready.
@@ -35,11 +37,8 @@ if errorlevel 1 (
 for /f "tokens=*" %%v in ('python --version 2^>^&1') do echo Python: %%v >> %LOG%
 python --version
 
-rem Note: sleep is prevented in-process during the long model download
-rem (download_models.py uses SetThreadExecutionState, same as run_interactive.py).
-
 echo.
-echo [2/7] Checking ffmpeg...
+echo [2/5] Checking ffmpeg...
 ffmpeg -version >nul 2>&1
 if errorlevel 1 (
     echo ffmpeg not found. Installing via winget...
@@ -49,6 +48,7 @@ if errorlevel 1 (
         echo ERROR: ffmpeg auto-install failed.
         echo Install manually: https://www.gyan.dev/ffmpeg/builds/
         echo ffmpeg: install FAILED >> %LOG%
+        set SETUP_FAILED=1
         goto :done
     )
     set "PATH=C:\Program Files\ffmpeg\bin;%PATH%"
@@ -60,18 +60,19 @@ if errorlevel 1 (
 )
 
 echo.
-echo [3/7] Installing dependencies...
+echo [3/5] Installing dependencies...
 echo Dependencies: installing >> %LOG%
 python -m pip install -q -r requirements.txt
 if errorlevel 1 (
     echo ERROR: pip install failed.
     echo Dependencies: FAILED >> %LOG%
+    set SETUP_FAILED=1
     goto :done
 )
 echo Dependencies: OK >> %LOG%
 
 echo.
-echo [4/7] Checking GPU...
+echo [4/5] Checking GPU...
 set GPU_FOUND=0
 where nvidia-smi >nul 2>&1
 if not errorlevel 1 set GPU_FOUND=1
@@ -100,12 +101,13 @@ echo GPU: not found, CPU mode >> %LOG%
 :after_gpu
 
 echo.
-echo [5/7] Checking config.env...
+echo [5/5] Checking config.env...
 if not exist config.env (
     if exist config.env.example (
         copy config.env.example config.env >nul
         echo Created config.env from example.
-        echo IMPORTANT: Edit config.env and set your HF_TOKEN before continuing.
+        echo (Speaker diarization needs your own HF_TOKEN - set it any time in
+        echo  the app's Settings ^> General, no need to edit config.env by hand.)
     ) else (
         echo WARNING: config.env not found. Diarization will be disabled.
     )
@@ -113,40 +115,21 @@ if not exist config.env (
     echo config.env found.
 )
 
-echo.
-echo [6/7] HuggingFace model licenses
-echo -------------------------------------------------------
-echo Before downloading you must accept the license for each
-echo pyannote model while logged in with your HF account:
-echo.
-echo   https://hf.co/pyannote/speaker-diarization-3.1
-echo   https://hf.co/pyannote/segmentation-3.0
-echo   https://hf.co/pyannote/embedding
-echo.
-echo Open all three links, click "Agree and access repository"
-echo -------------------------------------------------------
-pause
-
-echo.
-echo [7/7] Downloading models...
-echo (mandatory models install automatically; you will be asked about optional ones)
-python download_models.py
-if errorlevel 1 (
-    echo Models: download reported an error >> %LOG%
-) else (
-    echo Models: OK >> %LOG%
-)
-
 :done
 echo === Setup finished %DATE% %TIME% >> %LOG%
+if "%SETUP_FAILED%"=="1" (
+    echo.
+    echo ============================================================
+    echo   Setup did not finish - see the errors above. Log: %LOG%
+    echo ============================================================
+    echo.
+    pause
+    goto :eof
+)
 echo.
 echo ============================================================
-echo   Setup finished.
-echo   Log: %LOG%
-echo.
-echo   Next: put your audio/video files into the input\ folder
-echo   (.webm .mp4 .mkv .mov .avi .m4a .mp3 .wav),
-echo   then run run.bat to start transcription.
+echo   Setup finished. Log: %LOG%
+echo   Launching MeetingScribe...
 echo ============================================================
 echo.
-pause
+call run_gui.bat
