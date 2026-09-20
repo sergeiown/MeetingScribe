@@ -1,0 +1,158 @@
+"""Compute-device detection and Windows sleep-prevention."""
+
+import os
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Optional
+
+
+def _get_cpu_name():
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+            r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
+        name = winreg.QueryValueEx(key, "ProcessorNameString")[0]
+        winreg.CloseKey(key)
+        return name.strip()
+    except Exception:
+        pass
+    try:
+        import platform
+        return platform.processor() or "CPU"
+    except Exception:
+        return "CPU"
+
+
+def _add_cuda_dll_dirs():
+    """Windows: ctranslate2 needs cuBLAS/cuDNN DLLs; torch ships them in torch\\lib.
+    Also covers nvidia-* pip packages (site-packages/nvidia/*/bin)."""
+    if os.name != "nt" or getattr(_add_cuda_dll_dirs, "_done", False):
+        return
+    _add_cuda_dll_dirs._done = True
+    try:
+        import torch
+        candidates = [Path(torch.__file__).parent / "lib"]
+        import site
+        for sp in site.getsitepackages():
+            nv = Path(sp) / "nvidia"
+            if nv.is_dir():
+                candidates += list(nv.glob("*/bin"))
+        for d in candidates:
+            if d.is_dir():
+                os.add_dll_directory(str(d))
+                os.environ["PATH"] = str(d) + os.pathsep + os.environ.get("PATH", "")
+    except Exception:
+        pass
+
+
+def detect_device(prefer: str = "auto"):
+    """Returns (device_str, compute_type, device_name).
+
+    prefer: "auto" (use the GPU if available - default) or "cpu" (force CPU
+    even if a GPU is present, per the user's own Settings choice). Only ever
+    call this from the process-isolated ML pipeline - it imports torch,
+    which must never load in the same process as PySide6 (see
+    gui/process_worker.py's module docstring). For a torch-free device
+    summary safe to show in the main GUI, use detect_hardware_info().
+    """
+    if prefer != "cpu":
+        try:
+            import torch
+            if torch.cuda.is_available():
+                _add_cuda_dll_dirs()
+                major, _ = torch.cuda.get_device_capability(0)
+                # Pascal (sm_6x) and older have no efficient fp16 -> int8_float32
+                ctype = "float16" if major >= 7 else "int8_float32"
+                return "cuda", ctype, torch.cuda.get_device_name(0)
+        except Exception:
+            pass
+    return "cpu", "int8", _get_cpu_name()
+
+
+def _find_nvidia_smi() -> Optional[str]:
+    exe = shutil.which("nvidia-smi")
+    if exe:
+        return exe
+    for p in (
+        r"C:\Windows\System32\nvidia-smi.exe",
+        r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
+    ):
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def nvidia_gpu_present() -> bool:
+    """Torch-free NVIDIA GPU presence check - safe to call from the main GUI
+    process, unlike detect_device(), which must import torch."""
+    return _find_nvidia_smi() is not None
+
+
+def nvidia_gpu_name() -> Optional[str]:
+    """Torch-free GPU model name via `nvidia-smi`, or None if unavailable."""
+    exe = _find_nvidia_smi()
+    if not exe:
+        return None
+    try:
+        result = subprocess.run(
+            [exe, "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=5)
+        lines = result.stdout.strip().splitlines()
+        return lines[0].strip() if lines and lines[0].strip() else None
+    except Exception:
+        return None
+
+
+def _any_gpu_names() -> list:
+    """Every video controller Windows knows about (any vendor) - torch-free.
+    Used as a fallback when there's no NVIDIA card, so a real (AMD/Intel)
+    GPU still gets acknowledged instead of silently disappearing from the
+    hardware summary just because it can't be used for acceleration here."""
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"],
+            capture_output=True, text=True, timeout=8,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        # Drop the generic placeholder Windows reports for a disabled/
+        # fallback adapter, if a real one is also listed alongside it.
+        real = [n for n in names if "microsoft basic" not in n.lower()]
+        return real or names
+    except Exception:
+        return []
+
+
+def detect_hardware_info():
+    """(cpu_name, gpu_name_or_None, gpu_supported) - torch-free, safe for
+    the main GUI process. gpu_supported is only True for an NVIDIA card
+    (the only kind this app's CUDA-based acceleration can use) - an AMD or
+    Intel GPU is still reported by name, just marked unsupported rather
+    than silently omitted. Display only: the actual device used for a run
+    is decided inside the isolated ML pipeline process by detect_device()."""
+    cpu_name = _get_cpu_name()
+    nvidia_name = nvidia_gpu_name()
+    if nvidia_name:
+        return cpu_name, nvidia_name, True
+    others = _any_gpu_names()
+    return cpu_name, (others[0] if others else None), False
+
+
+def set_sleep_prevention(active: bool) -> None:
+    """Windows: keep the machine awake during long-running work. No-op elsewhere."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        ES_CONTINUOUS = 0x80000000
+        ES_SYSTEM_REQUIRED = 0x00000001
+        ES_DISPLAY_REQUIRED = 0x00000002
+        if active:
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)
+        else:
+            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+    except Exception:
+        pass
