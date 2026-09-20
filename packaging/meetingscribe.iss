@@ -52,6 +52,14 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
+; Both explicit for the in-app updater's /SILENT run (see [Run] below):
+; CloseApplications is defense-in-depth (should be a no-op - the app has
+; already exited itself before the installer ever starts). RestartApplications
+; is the one that actually matters: Inno 6 defaults it to "yes", and left
+; alone it would race the [Run] postinstall relaunch below, risking
+; launching MeetingScribe twice after every update.
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -79,7 +87,13 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename
 Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\img\icon.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait skipifsilent
+; No skipifsilent: the in-app updater runs this installer with /SILENT and
+; needs the app to relaunch itself afterward (it had to exit before
+; spawning the installer, and can't wait around to relaunch it manually -
+; see core.spawn_installer's docstring). /SILENT is only ever used by that
+; updater today, so this doesn't change behavior for a normal interactive
+; install, which still shows this as an optional, user-visible checkbox.
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait
 
 [UninstallDelete]
 ; The venv (PySide6, plus everything gui/bootstrap.py installs into it on

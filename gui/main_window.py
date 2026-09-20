@@ -19,6 +19,7 @@ from .device_prefs import get_device_preference
 from .i18n import tr, get_language
 from .settings_dialog import SettingsDialog
 from .dialogs import SpeakerNameDialog
+from .update_dialog import UpdateDownloadDialog
 from .workers import TranscriptionWorker, DiarizationWorker, UpdateCheckWorker
 
 _PREFERRED_WIDTH = 1080
@@ -379,8 +380,7 @@ class MainWindow(QMainWindow):
         # whenever the token was missing, which hid the fact that the
         # models were ALSO missing) - both gaps need to surface together,
         # since a fresh install commonly has neither yet.
-        models_missing = has_package and not all(
-            core.is_pyannote_installed(spec.key) for spec in core.PYANNOTE_MODELS)
+        models_missing = has_package and not core.is_diarization_complete()
         # Cached for _on_diarize_checkbox_clicked: the checkbox stays
         # enabled even when unavailable (see there for why), so this is the
         # only record of whether a click should actually be allowed to stick.
@@ -426,8 +426,7 @@ class MainWindow(QMainWindow):
         above (_diarize_unavailable_message) so the two never disagree."""
         has_token = bool(core.read_hf_token())
         has_package = core.has_diarization_support()
-        models_missing = has_package and not all(
-            core.is_pyannote_installed(spec.key) for spec in core.PYANNOTE_MODELS)
+        models_missing = has_package and not core.is_diarization_complete()
         available = has_package and has_token and not models_missing
         selected = self._selected_files()
         diarizable = available and any(core.file_status(f)[1] for f in selected)
@@ -483,7 +482,24 @@ class MainWindow(QMainWindow):
         thread.start()
 
     def _on_update_checked(self, info, manual):
-        if info:
+        if info and info.get("installer_url"):
+            box = QMessageBox(self)
+            box.setWindowTitle(tr("Update available"))
+            box.setText(tr("MeetingScribe {version} is available (you have v{current}).",
+                            version=info["version"], current=core.VERSION))
+            download_btn = box.addButton(tr("Download && Install"), QMessageBox.AcceptRole)
+            box.addButton(tr("Open releases page"), QMessageBox.ActionRole)
+            box.addButton(tr("Later"), QMessageBox.RejectRole)
+            box.exec()
+            clicked = box.clickedButton()
+            if clicked == download_btn:
+                self._start_update_download(info)
+            elif box.buttonRole(clicked) == QMessageBox.ActionRole:
+                QDesktopServices.openUrl(QUrl(info["url"]))
+        elif info:
+            # A release exists but has no matching MeetingScribe-Setup-*.exe
+            # asset (an older tag, or a manually-edited release) - nothing
+            # to download in-app, fall back to the plain releases-page link.
             box = QMessageBox(self)
             box.setWindowTitle(tr("Update available"))
             box.setText(tr("MeetingScribe {version} is available (you have v{current}).",
@@ -495,6 +511,40 @@ class MainWindow(QMainWindow):
                 QDesktopServices.openUrl(QUrl(info["url"]))
         elif manual:
             QMessageBox.information(self, tr("Check for updates"), tr("You're using the latest version."))
+
+    def _start_update_download(self, info):
+        dest = core.UPDATE_DOWNLOAD_DIR / info["installer_name"]
+        dlg = UpdateDownloadDialog(info["installer_url"], dest, info["installer_size"], info["version"], self)
+        dlg.start()
+        dlg.exec()
+        if dlg.installer_path is not None:
+            self._run_update_now(dlg.installer_path, info["version"])
+        elif dlg.error:
+            QMessageBox.warning(self, tr("Download failed"),
+                                 tr("Could not download the update: {error}", error=dlg.error))
+        # A plain cancel falls through here silently - the app stays fully
+        # usable either way, and the partial download was already cleaned
+        # up by core.download_installer's own except clause.
+
+    def _run_update_now(self, installer_path, version):
+        if self._worker is not None:
+            QMessageBox.information(self, tr("Update"), tr(
+                "A transcription is still running. Finish or cancel it, then try installing the update again."))
+            return
+        ans = QMessageBox.question(self, tr("Install update"), tr(
+            "Install version {version} now? MeetingScribe will close and reopen.\n\n"
+            "Windows may show a security prompt for the installer since it isn't "
+            "code-signed - that's expected.", version=version))
+        if ans != QMessageBox.Yes:
+            return  # installer_path stays on disk; swept on the next launch
+        log_path = core.UPDATE_DOWNLOAD_DIR / f"install-{version}.log"
+        try:
+            core.spawn_installer(installer_path, log_path)
+        except OSError as e:
+            QMessageBox.warning(self, tr("Update failed"),
+                                 tr("Could not start the installer: {error}", error=str(e)))
+            return
+        self.close()
 
     def _selected_rows(self):
         return sorted({idx.row() for idx in self._file_table.selectedIndexes()})

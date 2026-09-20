@@ -66,6 +66,24 @@ _UK = {
         "Доступна MeetingScribe {version} (у вас v{current}).",
     "Open releases page": "Відкрити сторінку релізів",
     "You're using the latest version.": "У вас найновіша версія.",
+    "Download && Install": "Завантажити і встановити",
+    "Later": "Пізніше",
+    "Downloading update": "Завантаження оновлення",
+    "Downloading MeetingScribe {version}...": "Завантаження MeetingScribe {version}...",
+    "Cancelling...": "Скасування...",
+    "Could not download the update: {error}": "Не вдалося завантажити оновлення: {error}",
+    "Update": "Оновлення",
+    "A transcription is still running. Finish or cancel it, then try installing the update again.":
+        "Розшифровка ще триває. Завершіть або скасуйте її, потім спробуйте встановити оновлення знову.",
+    "Install update": "Встановлення оновлення",
+    "Install version {version} now? MeetingScribe will close and reopen.\n\n"
+    "Windows may show a security prompt for the installer since it isn't "
+    "code-signed - that's expected.":
+        "Встановити версію {version} зараз? MeetingScribe закриється і перезапуститься.\n\n"
+        "Windows може показати запит безпеки для інсталятора, оскільки він не "
+        "підписаний цифровим підписом - це очікувано.",
+    "Update failed": "Помилка оновлення",
+    "Could not start the installer: {error}": "Не вдалося запустити інсталятор: {error}",
     "Delete files": "Видалення файлів",
     "Select one or more files in the table first.": "Спочатку виберіть один або кілька файлів у таблиці.",
     "No files selected": "Файли не вибрані",

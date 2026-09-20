@@ -76,6 +76,7 @@ def main():
     app.styleHints().colorSchemeChanged.connect(_on_system_theme_changed)
 
     core.ensure_workdirs()
+    core.cleanup_update_downloads()
     core.init_logger()
 
     # The mandatory model is exactly that - mandatory - so it's bundled in
