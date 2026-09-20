@@ -1,0 +1,256 @@
+"""Minimal i18n: English source strings are the identity default (no en
+table needed); other languages are a dict keyed by the exact English string.
+
+Usage: tr("Some label") or tr("Deleted {n} files", n=3) for templates.
+"""
+
+from PySide6.QtCore import QSettings
+
+_LANG_KEY = "language"
+DEFAULT_LANGUAGE = "en"
+
+_UK = {
+    # main_window.py
+    "Settings": "Налаштування",
+    "Help": "Довідка",
+    "About": "Про програму",
+    "Files": "Файли",
+    "Transcript": "Розшифровка",
+    "File": "Файл",
+    "Size": "Розмір",
+    "Duration": "Тривалість",
+    "Status": "Статус",
+    "No files yet - click \"Add files...\" or drop some into input\\":
+        "Ще немає файлів - натисніть \"Додати файли...\" або киньте їх у теку input\\",
+    "The transcript will appear here once processing starts...":
+        "Розшифровка з'явиться тут після початку обробки...",
+    "Add files...": "Додати файли...",
+    "Refresh": "Оновити",
+    "Delete selected": "Видалити вибрані",
+    "Options": "Опції",
+    "Model:": "Модель:",
+    "Language:": "Мова:",
+    "Ukrainian": "Українська",
+    "Auto-detect": "Автовизначення",
+    "Speaker diarization": "Розділення за спікерами",
+    "Automatically identify speakers\nafter recognition": "Автоматично визначати спікерів\nпісля розпізнавання",
+    "Count (0 = auto):": "Кількість (0 = авто):",
+    "Recognize speech": "Розпізнати мовлення",
+    "Identify speakers": "Визначити спікерів",
+    "Select a recognized file that hasn't had speakers identified yet.":
+        "Виберіть розпізнаний файл, для якого ще не визначено спікерів.",
+    "Cancel": "Скасувати",
+    "Ready.": "Готово до роботи.",
+    "Overall": "Загальний",
+    "Current file": "Поточний файл",
+    "Open output folder": "Відкрити теку результатів",
+    "Exit": "Вихід",
+    "Add audio/video files": "Додати аудіо/відео файли",
+    "Media files": "Медіафайли",
+    "About MeetingScribe": "Про MeetingScribe",
+    "<b>MeetingScribe</b> v{version}<br><br>"
+    "Local meeting transcription with speaker diarization and "
+    "known-speaker recognition. Everything runs on this machine - "
+    "no audio ever leaves the host.<br><br>"
+    "MIT License © Serhii Myshko<br>"
+    '<a href="https://github.com/sergeiown/MeetingScribe">github.com/sergeiown/MeetingScribe</a>':
+        "<b>MeetingScribe</b> v{version}<br><br>"
+        "Локальна розшифровка нарад з розділенням за спікерами та "
+        "розпізнаванням відомих голосів. Все виконується на цьому "
+        "комп'ютері - аудіо ніколи не залишає його.<br><br>"
+        "Ліцензія MIT © Сергій Мишко<br>"
+        '<a href="https://github.com/sergeiown/MeetingScribe">github.com/sergeiown/MeetingScribe</a>',
+    "Check for updates": "Перевірити оновлення",
+    "Update available": "Доступне оновлення",
+    "MeetingScribe {version} is available (you have v{current}).":
+        "Доступна MeetingScribe {version} (у вас v{current}).",
+    "Open releases page": "Відкрити сторінку релізів",
+    "You're using the latest version.": "У вас найновіша версія.",
+    "Delete files": "Видалення файлів",
+    "Select one or more files in the table first.": "Спочатку виберіть один або кілька файлів у таблиці.",
+    "No files selected": "Файли не вибрані",
+    "Delete {n} file(s) from input\\? This cannot be undone.\n\n{names}":
+        "Видалити {n} файл(и) з input\\? Цю дію не можна скасувати.\n\n{names}",
+    "No model": "Немає моделі",
+    "Install a recognition model first (Settings > Models).":
+        "Спочатку встановіть модель розпізнавання (Налаштування > Моделі).",
+    "Already transcribed": "Вже розшифровано",
+    "{n} file(s) already have output. Re-transcribe and overwrite them?\n\n{names}":
+        "{n} файл(и) вже мають результат. Розшифрувати повторно та перезаписати?\n\n{names}",
+    "Cancelling...": "Скасування...",
+    "Done.": "Готово.",
+    "Cancelled.": "Скасовано.",
+    "Transcription running": "Триває розшифровка",
+    "A transcription is still running. Cancel it and quit?":
+        "Розшифровка ще триває. Скасувати її та вийти?",
+    "No model installed - open Settings": "Немає встановленої моделі - відкрийте Налаштування",
+    "  [recommended]": "  [рекомендовано]",
+    "unknown": "невідомо",
+    "✓ Transcribed": "✓ Розшифровано",
+    "Speaker diarization isn't available in this install.":
+        "Розділення за спікерами недоступне в цьому встановленні.",
+    "Enter a Hugging Face token and download the diarization "
+    "models in Settings > Models.":
+        "Введіть токен Hugging Face і завантажте моделі діаризації "
+        "у Налаштування > Моделі.",
+    "Enter a Hugging Face token in Settings > Models to enable this.":
+        "Введіть токен Hugging Face у Налаштування > Моделі, щоб увімкнути це.",
+    "Diarization models aren't downloaded yet - get them from Settings > Models.":
+        "Моделі діаризації ще не завантажені - отримайте їх у Налаштування > Моделі.",
+    "File %v of %m": "Файл %v з %m",
+    "ETA {time}": "Залишилось {time}",
+    "Saved: {path}": "Збережено: {path}",
+
+    # widgets.py (ModelRowWidget)
+    "Installed": "Встановлено",
+    "Not installed": "Не встановлено",
+    "Download": "Завантажити",
+    "Needs HF_TOKEN - enter it above": "Потрібен HF_TOKEN - введіть його вище",
+    "Failed: {error}": "Помилка: {error}",
+    "Failed": "Помилка",
+
+    # settings_dialog.py
+    "Recognition (Whisper)": "Розпізнавання (Whisper)",
+    "Diarization (pyannote)": "Діаризація (pyannote)",
+    "Gated models - accept the license while logged in to Hugging Face:<br>"
+    '<a href="https://hf.co/pyannote/speaker-diarization-3.1">speaker-diarization-3.1</a>, '
+    '<a href="https://hf.co/pyannote/segmentation-3.0">segmentation-3.0</a>, '
+    '<a href="https://hf.co/pyannote/embedding">embedding</a>':
+        "Моделі з обмеженим доступом - прийміть ліцензію, увійшовши в Hugging Face:<br>"
+        '<a href="https://hf.co/pyannote/speaker-diarization-3.1">speaker-diarization-3.1</a>, '
+        '<a href="https://hf.co/pyannote/segmentation-3.0">segmentation-3.0</a>, '
+        '<a href="https://hf.co/pyannote/embedding">embedding</a>',
+    "Speaker": "Спікер",
+    "Version": "Версія",
+    "Date": "Дата",
+    "Rename": "Перейменувати",
+    "Delete version": "Видалити версію",
+    "Delete all versions": "Видалити всі версії",
+    "Export selected...": "Експортувати вибрані...",
+    "Export all...": "Експортувати всі...",
+    "Import...": "Імпортувати...",
+    "Export selected": "Експорт вибраних",
+    "Select one or more rows to export.": "Виберіть один або кілька рядків для експорту.",
+    "Export all": "Експорт усіх",
+    "There are no enrolled speakers to export.": "Немає жодного зареєстрованого спікера для експорту.",
+    "Export speakers": "Експорт спікерів",
+    "Exported {n} voiceprint(s) to {path}.": "Експортовано {n} голосовий(і) відбиток(и) у {path}.",
+    "Export failed": "Помилка експорту",
+    "Could not write the export file:\n\n{error}": "Не вдалося записати файл експорту:\n\n{error}",
+    "Import speakers": "Імпорт спікерів",
+    "Imported {n} voiceprint(s).": "Імпортовано {n} голосовий(і) відбиток(и).",
+    "Import failed": "Помилка імпорту",
+    "Could not read the import file:\n\n{error}": "Не вдалося прочитати файл імпорту:\n\n{error}",
+    "Select a speaker to rename.": "Виберіть спікера для перейменування.",
+    "Rename speaker": "Перейменування спікера",
+    "New name:": "Нове ім'я:",
+    "Select a version to delete.": "Виберіть версію для видалення.",
+    "Delete {name}?": "Видалити {name}?",
+    "Select a speaker to delete.": "Виберіть спікера для видалення.",
+    'Delete ALL versions of "{name}"? This cannot be undone.':
+        'Видалити УСІ версії "{name}"? Цю дію не можна скасувати.',
+    'Hugging Face token: <a href="https://huggingface.co/settings/tokens">get one here</a>':
+        'Токен Hugging Face: <a href="https://huggingface.co/settings/tokens">отримати тут</a>',
+    "Show": "Показати",
+    "Hide": "Приховати",
+    "Save token": "Зберегти токен",
+    "Default language:": "Мова розпізнавання за замовчуванням:",
+    "Enable speaker diarization by default": "Вмикати розділення за спікерами за замовчуванням",
+    "Theme:": "Тема:",
+    "System (auto)": "Системна (авто)",
+    "Light": "Світла",
+    "Dark": "Темна",
+    "Saved": "Збережено",
+    "HF_TOKEN saved to config.env.": "HF_TOKEN збережено у config.env.",
+    "Interface language:": "Мова інтерфейсу:",
+    "Hardware": "Обладнання",
+    "CPU: {name}": "CPU: {name}",
+    "GPU: {name}": "GPU: {name}",
+    "GPU: {name} (not supported for acceleration)": "GPU: {name} (не підтримується для прискорення)",
+    "Use for processing:": "Використовувати для обробки:",
+    "Automatic (use GPU - recommended)": "Автоматично (використовувати GPU - рекомендовано)",
+    "CPU only": "Лише CPU",
+    "The GPU is much faster for speech recognition and speaker "
+    "identification, especially with larger models. CPU works "
+    "everywhere and leaves the GPU free for other tasks (e.g. "
+    "gaming) while processing.":
+        "GPU значно швидший для розпізнавання мовлення та визначення "
+        "спікерів, особливо з важчими моделями. CPU працює завжди і "
+        "залишає GPU вільним для інших задач (наприклад, ігор) під час "
+        "обробки.",
+    "Models": "Моделі",
+    "Speakers": "Спікери",
+    "General": "Загальні",
+    "Close": "Закрити",
+    "Save and Close": "Зберегти і закрити",
+
+    # dialogs.py
+    "Unidentified speaker": "Невизначений спікер",
+    "(no text samples)": "(немає текстових зразків)",
+    "Name (leave empty to skip):": "Ім'я (залиште порожнім, щоб пропустити):",
+    '"{name}" already in database ({file}).': '"{name}" вже є в базі ({file}).',
+    "Overwrite": "Перезаписати",
+    "Add new version": "Додати нову версію",
+    "Save": "Зберегти",
+    "Skip": "Пропустити",
+    # app.py
+    "Download failed": "Помилка завантаження",
+    "Could not download the model: {error}\n\nYou can retry later from Settings > Models.":
+        "Не вдалося завантажити модель: {error}\n\nМожна повторити пізніше через Налаштування > Моделі.",
+
+    # bootstrap.py
+    "MeetingScribe - Setting up": "MeetingScribe - Налаштування",
+    "Starting...": "Починаємо...",
+    "{time} elapsed": "минуло {time}",
+    "MeetingScribe needs about 2-3 GB of speech-recognition "
+    "components it doesn't bundle by default. This is a one-time "
+    "download - how long it takes depends mostly on your internet "
+    "speed, often several minutes. You won't need to do this again. "
+    "The line below shows the exact package and size currently "
+    "downloading.":
+        "MeetingScribe потребує близько 2-3 ГБ компонентів розпізнавання "
+        "мовлення, які не входять до типової поставки. Це одноразове "
+        "завантаження - тривалість залежить переважно від швидкості вашого "
+        "інтернету, часто кілька хвилин. Повторно це не знадобиться. "
+        "Рядок нижче показує, який саме пакет і якого розміру завантажується "
+        "зараз.",
+    "Setup failed": "Помилка встановлення",
+    "Could not install required components:\n\n{error}\n\n"
+    "Try restarting the app, or install manually:\npip install -r \"{path}\"":
+        "Не вдалося встановити необхідні компоненти:\n\n{error}\n\n"
+        "Спробуйте перезапустити застосунок, або встановіть вручну:\npip install -r \"{path}\"",
+
+    # core status messages (translated at the GUI display boundary)
+    "Converting to WAV...": "Конвертація у WAV...",
+    "Transcribing...": "Розшифровка...",
+    "Loading diarization pipeline...": "Завантаження конвеєра діаризації...",
+    "Diarizing...": "Діаризація...",
+    "Diarization done.": "Діаризацію завершено.",
+    "Speaker identification...": "Розпізнавання спікерів...",
+    "Loading embedding model...": "Завантаження моделі ембеддингів...",
+    "Embedding model not cached locally - attempting download...":
+        "Модель ембеддингів не кешована локально - спроба завантаження...",
+}
+
+_CATALOG = {"uk": _UK}
+
+
+def available_languages():
+    """[(code, native display name), ...] - names shown in their own
+    language, never translated (same convention as the README's language
+    switcher badges)."""
+    return [("en", "English"), ("uk", "Українська")]
+
+
+def get_language() -> str:
+    return QSettings("MeetingScribe", "MeetingScribe").value(_LANG_KEY, DEFAULT_LANGUAGE)
+
+
+def set_language(code: str) -> None:
+    QSettings("MeetingScribe", "MeetingScribe").setValue(_LANG_KEY, code)
+
+
+def tr(text: str, **kwargs) -> str:
+    table = _CATALOG.get(get_language())
+    translated = table.get(text, text) if table else text
+    return translated.format(**kwargs) if kwargs else translated
