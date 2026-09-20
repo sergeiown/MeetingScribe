@@ -25,9 +25,10 @@ automatic language detection (Whisper is multilingual, so other languages work t
   <img src="img/structure.svg" alt="MeetingScribe pipeline" width="720">
 </p>
 
-1. You drop audio/video files into the `input/` folder and run the tool.
+1. You drop audio/video files into the `input/` folder and click **Recognize speech**.
 2. faster-whisper transcribes the speech.
-3. pyannote `speaker-diarization-3.1` splits the audio into speaker turns.
+3. If enabled (or later, via **Identify speakers**), pyannote `speaker-diarization-3.1`
+   splits the audio into speaker turns.
 4. Each turn is turned into a voice embedding and matched against a local
    speaker database, so known people get their real names in the transcript.
 5. Unrecognized speakers are shown with sample lines; you can name them and
@@ -39,11 +40,19 @@ falls back to a plain transcript with timestamps.
 
 ## Features
 
+- Native desktop GUI (Windows) - no command line needed for everyday use.
 - Fully local - runs offline once models are downloaded; no audio uploaded anywhere.
 - Speaker diarization (who spoke when) via pyannote `speaker-diarization-3.1`.
+- Recognition and speaker identification are separate steps: run both at once,
+  or identify speakers later for an already-recognized file, without
+  re-running speech recognition.
 - Known-speaker recognition against a local, versioned voiceprint database.
 - On-the-fly enrollment: name an unknown speaker and save their voiceprint
   (`Name (v1).npy`, `Name (v2).npy`, …), with overwrite / add-version / skip prompts.
+- No silent downloads - the app always asks before fetching a model, with the
+  recommended choice pre-checked.
+- Light/dark theme (follows Windows automatically, or set manually) and an
+  English/Ukrainian interface language switch.
 - Automatic language detection, optimized for Ukrainian (other languages are
   supported via Whisper's multilingual model).
 - CPU or NVIDIA CUDA, auto-detected.
@@ -55,8 +64,8 @@ falls back to a plain transcript with timestamps.
 
 What you need yourself:
 
-- **Windows 10/11.** The `.bat` launchers are Windows-oriented (the Python
-  scripts themselves are cross-platform).
+- **Windows 10/11.** The `.bat` launchers (`setup.bat`, `run_gui.bat`) are
+  Windows-oriented (the Python code itself is cross-platform).
 - **An internet connection** for the first run (to fetch dependencies and models).
 - **Optional: a [HuggingFace](https://huggingface.co/) account and token** to
   enable speaker diarization. Without it the tool still works as plain
@@ -68,7 +77,7 @@ prepare any of it:
 - **Python 3.12** (only if Python is not already installed).
 - **ffmpeg**.
 - **Python dependencies** from `requirements.txt` (faster-whisper,
-  pyannote.audio, torch, numpy, huggingface_hub, ffmpeg-python).
+  pyannote.audio, torch, numpy, huggingface_hub, PySide6).
 - The **CUDA build of torch** if an NVIDIA GPU is detected (otherwise it runs on
   CPU). Auto-detected, nothing to configure.
 - The **models** (see [Models and licenses](#models-and-licenses)).
@@ -82,43 +91,24 @@ setup.bat
 ```
 
 It checks/installs Python, ffmpeg and the Python dependencies, detects an NVIDIA
-GPU and installs the CUDA build of torch if present, prepares `config.env`,
-reminds you about the HuggingFace model licenses, and downloads the models: the
-mandatory light model (Whisper `small`, ~460 MB) installs automatically, and it
-asks whether you also want the optional higher-accuracy models
-(`large-v3-turbo`, `large-v3`). It ends with a summary and waits for a keypress.
+GPU and installs the CUDA build of torch if present, and prepares `config.env`.
+It finishes by launching MeetingScribe itself.
 
-To (re-)download models separately:
-
-```bat
-download_models.bat
-```
-
-`download_models.py` supports `--all` (mandatory + every optional, no prompts),
-`--mandatory` (mandatory only), and an interactive default. Run
-non-interactively without a flag, it behaves as `--mandatory`.
+On first launch, if no recognition model is installed yet, the app asks before
+downloading anything - nothing happens silently, and the recommended choice is
+pre-checked. A small demo recording (`samples/demo.wav`) is bundled so there's
+something to try right away, no recording of your own required.
 
 ## Configuration (HuggingFace token)
 
 Diarization uses gated pyannote models, which require a HuggingFace token with
 the model licenses accepted.
 
-1. Copy the template to create your local config:
-
-   ```bat
-   copy config.env.example config.env
-   ```
-
-   (`setup.bat` does this for you if `config.env` is missing.)
-
-2. Get a token at <https://hf.co/settings/tokens> and put it in `config.env`:
-
-   ```
-   HF_TOKEN=hf_your_token_here
-   ```
-
-   `HF_TOKEN` can also be set as an environment variable, which takes precedence.
-
+1. Get a token at <https://hf.co/settings/tokens>.
+2. Paste it into the app's **Settings > General** tab and click "Save token" -
+   this writes it to `config.env` for you. (You can also edit `config.env`
+   directly; see `config.env.example`. `HF_TOKEN` can also be set as an
+   environment variable, which takes precedence.)
 3. Accept the license for each gated pyannote model while logged in to
    HuggingFace:
    - <https://hf.co/pyannote/speaker-diarization-3.1>
@@ -129,16 +119,26 @@ the model licenses accepted.
 
 ## Usage
 
-1. Put your audio/video files in the `input/` folder.
-2. Run:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="img/screenshot_dark.png">
+    <img src="img/screenshot_light.png" alt="MeetingScribe main window" width="800">
+  </picture>
+</p>
 
-   ```bat
-   run.bat
-   ```
+1. Launch the app (`run_gui.bat`, or it opens automatically at the end of `setup.bat`).
+2. Put files in the `input/` folder, or use **Add files...** in the app.
+3. Select one or more files in the table, pick a recognition model and language.
+4. Click **Recognize speech**. With "Automatically identify speakers after
+   recognition" off, it stops after producing a plain transcript - click
+   **Identify speakers** whenever you're ready to add speaker labels to an
+   already-recognized file, without re-running speech recognition.
+5. For unrecognized speakers, name them and optionally save their voiceprint
+   for next time.
+6. Find the transcript in `output/` (one `.txt` per input file).
 
-3. Pick the file(s), recognition model, language, and whether to diarize.
-4. For unrecognized speakers, optionally type a name and save their voiceprint.
-5. Find the transcript in `output/` (one `.txt` per input file).
+Installed models, saved speakers, your HuggingFace token, theme, and interface
+language (English/Українська) are all managed from **Settings**.
 
 ## Supported input formats
 
@@ -174,8 +174,9 @@ with periodic timestamps.
 
 ## Models and licenses
 
-No model weights are stored in this repository. They are downloaded separately
-by `download_models.py` into the local `models/` folder, and **each is covered
+No model weights are stored in this repository. They are downloaded through
+the app itself (the first-run prompt for the mandatory model, or **Settings >
+Models** for the rest) into the local `models/` folder, and **each is covered
 by its own license - not by this project's MIT license**. You are responsible
 for accepting and complying with the terms of every model you download.
 
@@ -215,10 +216,10 @@ This tool stands on these open-source projects (their own licenses apply):
 |---|---|---|
 | faster-whisper | <https://github.com/SYSTRAN/faster-whisper> | MIT |
 | pyannote.audio | <https://github.com/pyannote/pyannote-audio> | MIT |
+| PySide6 (Qt for Python) | <https://www.qt.io/qt-for-python> | LGPL-3.0 |
 | PyTorch | <https://github.com/pytorch/pytorch> | BSD-3-Clause |
 | NumPy | <https://github.com/numpy/numpy> | BSD-3-Clause |
 | huggingface_hub | <https://github.com/huggingface/huggingface_hub> | Apache-2.0 |
-| ffmpeg-python | <https://github.com/kkroening/ffmpeg-python> | Apache-2.0 |
 | FFmpeg | <https://ffmpeg.org/> | LGPL-2.1+/GPL |
 
 ## License
