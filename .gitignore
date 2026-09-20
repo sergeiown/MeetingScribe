@@ -11,3 +11,10 @@ logs/
 # Python
 __pycache__/
 *.pyc
+
+# Installer/launcher build output
+packaging/dist/
+packaging/*.log
+packaging/launcher/build/
+packaging/launcher/dist/
+packaging/launcher/*.spec
