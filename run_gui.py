@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""GUI entry point. Run via run_gui.bat, or via the installed launcher exe
-(which spawns `pythonw run_gui.py` with no console window)."""
+"""GUI entry point. The installed app's shortcuts run this directly via
+the venv's pythonw.exe, with no console window."""
 
 import logging
 import os

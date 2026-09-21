@@ -103,9 +103,6 @@ you do not need to prepare any of it:
 MeetingScribe checks for updates on launch (and via **Help > Check for
 updates**); installing one is a single confirmation away.
 
-Prefer to run from source instead? See `setup.bat` and `run_gui.bat` in the
-project root.
-
 ## Configuration (HuggingFace token)
 
 Diarization uses gated pyannote models, which require a HuggingFace token with

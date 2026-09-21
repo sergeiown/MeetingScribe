@@ -70,7 +70,6 @@ Source: "{#SourceRoot}gui\*"; DestDir: "{app}\gui"; Flags: recursesubdirs ignore
 Source: "{#SourceRoot}samples\*"; DestDir: "{app}\samples"; Flags: recursesubdirs ignoreversion
 Source: "{#SourceRoot}img\icon.ico"; DestDir: "{app}\img"; Flags: ignoreversion
 Source: "{#SourceRoot}run_gui.py"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceRoot}run_gui.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}config.env.example"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}LICENSE"; DestDir: "{app}"; Flags: ignoreversion

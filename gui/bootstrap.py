@@ -89,8 +89,7 @@ def dependencies_installed() -> bool:
 
 
 def _nvidia_gpu_present() -> bool:
-    """Same detection setup.bat uses; checked before torch exists, so it
-    can't rely on torch.cuda.is_available()."""
+    """Checked before torch exists, so it can't rely on torch.cuda.is_available()."""
     if shutil.which("nvidia-smi"):
         return True
     for p in (
