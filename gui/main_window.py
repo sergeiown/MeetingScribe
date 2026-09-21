@@ -7,7 +7,7 @@ from pathlib import Path
 import core
 
 from PySide6.QtCore import Qt, QSettings, QThread, QUrl
-from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtGui import QAction, QDesktopServices, QTextCursor
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem,
@@ -569,6 +569,7 @@ class MainWindow(QMainWindow):
         self._progress_phase = None
         self._progress_phase_start = None
         self._current_file_index = 0
+        self._current_file_body_pos = None
         self._transcribe_btn.setEnabled(False)
         self._diarize_btn.setEnabled(False)
         self._cancel_btn.setEnabled(True)
@@ -682,13 +683,34 @@ class MainWindow(QMainWindow):
         self._progress_phase = None  # force a fresh ETA clock for this file
         self._overall_progress_bar.setValue(index - 1)
         self._transcript_view.append(f"\n=== [{index}/{total}] {name} ===")
+        self._current_file_body_pos = self._transcript_view.document().characterCount()
 
     def _on_file_done(self, name, out_path):
         self._overall_progress_bar.setValue(self._current_file_index)
+        # Replace the live per-segment dump with the actual saved transcript,
+        # so a diarization pass (auto or the separate "Identify speakers" run)
+        # is reflected here with speaker names instead of the plain text
+        # that was streamed in during recognition.
+        self._show_saved_transcript(out_path)
+        self._current_file_body_pos = None
         self._transcript_view.append(tr("Saved: {path}", path=out_path))
+
+    def _show_saved_transcript(self, out_path):
+        if self._current_file_body_pos is None:
+            return
+        try:
+            text = Path(out_path).read_text(encoding="utf-8")
+        except OSError:
+            return
+        cursor = self._transcript_view.textCursor()
+        cursor.setPosition(self._current_file_body_pos)
+        cursor.movePosition(QTextCursor.End, QTextCursor.KeepAnchor)
+        cursor.removeSelectedText()
+        cursor.insertText(text)
 
     def _on_file_failed(self, name, message):
         self._overall_progress_bar.setValue(self._current_file_index)
+        self._current_file_body_pos = None
         self._transcript_view.append(f"{name}: {message}")
 
     def _on_finished(self):
