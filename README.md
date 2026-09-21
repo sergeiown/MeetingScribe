@@ -25,7 +25,8 @@ automatic language detection (Whisper is multilingual, so other languages work t
   <img src="img/structure.svg" alt="MeetingScribe pipeline" width="720">
 </p>
 
-1. You drop audio/video files into the `input/` folder and click **Recognize speech**.
+1. You add audio/video files with **Add files...** (or drop them into the
+   `input/` folder) and click **Recognize speech**.
 2. faster-whisper transcribes the speech.
 3. If enabled (or later, via **Identify speakers**), pyannote `speaker-diarization-3.1`
    splits the audio into speaker turns.
@@ -134,7 +135,8 @@ the model licenses accepted.
 
 1. Launch MeetingScribe from the Start Menu or desktop shortcut (it also opens
    automatically right after installing).
-2. Put files in the `input/` folder, or use **Add files...** in the app.
+2. Use **Add files...** in the app (simplest), or put files in the `input/`
+   folder.
 3. Select one or more files in the table, pick a recognition model and language.
 4. Click **Recognize speech**. With "Automatically identify speakers after
    recognition" off, it stops after producing a plain transcript - click
