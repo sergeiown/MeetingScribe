@@ -513,12 +513,22 @@ class MainWindow(QMainWindow):
                     self, tr("Check for updates"), tr("Already checking - hang on a moment."))
             return
         self._checking_updates = True
+        self._update_check_manual = manual  # read back by the two handlers below
         thread = QThread(self)
         worker = UpdateCheckWorker()
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.checked.connect(lambda info: self._on_update_checked(info, manual))
-        worker.failed.connect(lambda err: self._on_update_check_failed(err, manual))
+        # Connected directly to bound methods of self (a real QObject whose
+        # thread() Qt can see is the GUI thread), not a lambda: a lambda has
+        # no thread affinity of its own, so AutoConnection can't tell this
+        # needs queuing back to the GUI thread - even passing an explicit
+        # Qt.QueuedConnection didn't help, since there's still no receiver
+        # thread to queue it to. Without this, the callback ran in place on
+        # worker's own QThread, where it then tried to build a QMessageBox
+        # from a non-GUI thread and hard-froze the window (confirmed live
+        # via a py-spy stack dump of the hang).
+        worker.checked.connect(self._on_update_checked)
+        worker.failed.connect(self._on_update_check_failed)
         worker.checked.connect(thread.quit)
         worker.failed.connect(thread.quit)
         thread.finished.connect(worker.deleteLater)
@@ -532,18 +542,19 @@ class MainWindow(QMainWindow):
         self._update_check_worker = worker
         thread.start()
 
-    def _on_update_check_failed(self, error, manual):
+    def _on_update_check_failed(self, error):
         self._checking_updates = False
         # The silent startup check stays silent on failure (e.g. offline) -
         # only a manually-requested check reports it, so it's never
         # mistaken for "you're up to date" when the check didn't complete.
-        if manual:
+        if self._update_check_manual:
             QMessageBox.warning(
                 self, tr("Check for updates"),
                 tr("Could not check for updates: {error}", error=error))
 
-    def _on_update_checked(self, info, manual):
+    def _on_update_checked(self, info):
         self._checking_updates = False
+        manual = self._update_check_manual
         if info and info.get("installer_url"):
             box = QMessageBox(self)
             box.setWindowTitle(tr("Update available"))
