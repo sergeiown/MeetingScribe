@@ -213,7 +213,16 @@ def run_model_download_process(kind, args, hf_token, progress_q, cancel_event):
     except core.Cancelled:
         progress_q.put(("cancelled",))
     except Exception as e:
-        progress_q.put(("failed", str(e)))
+        progress_q.put(("failed", _model_download_error_message(e)))
+
+
+def _model_download_error_message(e):
+    err_str = str(e)
+    if "401" in err_str:
+        return "Invalid Hugging Face token."
+    if "403" in err_str or "gated" in err_str.lower() or "restricted" in err_str.lower():
+        return "Access denied - accept the license on Hugging Face."
+    return err_str
 
 
 def _diarization_error_message(de):

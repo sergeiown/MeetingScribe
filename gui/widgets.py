@@ -107,6 +107,7 @@ class ModelRowWidget(QFrame):
 
     def set_installed(self, installed: bool):
         self._status_label.setText(tr("Installed") if installed else tr("Not installed"))
+        self._status_label.setToolTip("")
         self._status_label.setVisible(True)
         self._progress.setVisible(False)
         self._mode = "delete" if installed else "download"
@@ -154,4 +155,5 @@ class ModelRowWidget(QFrame):
             self._action_btn.setText(tr("Download"))
             self._action_btn.setEnabled(True)
             self._status_label.setText(tr("Failed: {error}", error=error[:60]) if error else tr("Failed"))
+            self._status_label.setToolTip(error)
             self._status_label.setVisible(True)

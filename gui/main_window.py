@@ -674,7 +674,12 @@ class MainWindow(QMainWindow):
     # --- worker signal handlers --------------------------------------------
 
     def _on_status(self, msg):
-        self._status_label.setText(tr(msg))
+        # Also echoed into the transcript pane - model loading in particular
+        # can take a noticeable while before the first real segment of text
+        # arrives, and this is what keeps that stretch from looking frozen.
+        text = tr(msg)
+        self._status_label.setText(text)
+        self._transcript_view.append(text)
 
     def _on_progress(self, phase, current, total, label):
         if phase != self._progress_phase:
