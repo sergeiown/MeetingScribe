@@ -8,6 +8,9 @@
 ; system/user Python, so uninstall (see [UninstallDelete]) can remove
 ; everything cleanly without touching any other Python install.
 ;
+; System Python and ffmpeg are installed via winget if missing (see [Code]) -
+; both are real prerequisites the app itself can't bundle.
+;
 ; The launcher (launcher/launcher.py, built via PyInstaller - see README.md
 ; in this folder) only spawns the venv's pythonw.exe on run_gui.py with no
 ; console window; it does not itself contain the app.
@@ -150,6 +153,44 @@ begin
   end;
 end;
 
+function IsFfmpegInstalled(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec('cmd.exe', '/c ffmpeg -version >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+    and (ResultCode = 0);
+end;
+
+procedure InstallFfmpegIfMissing();
+var
+  ResultCode: Integer;
+begin
+  if not IsFfmpegInstalled() then
+  begin
+    if MsgBox('ffmpeg was not found on this system. MeetingScribe needs it to read audio/video files.' + #13#10#13#10 +
+              'Install it now via winget? This needs an internet connection.',
+              mbConfirmation, MB_YESNO) = IDYES then
+    begin
+      WizardForm.StatusLabel.Caption := 'Installing ffmpeg (this may take a few minutes)...';
+      WizardForm.Update;
+      Exec('cmd.exe',
+        '/c winget install -e --id Gyan.FFmpeg --silent --accept-package-agreements --accept-source-agreements',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      // find_ffmpeg() in core/audio.py also checks this default install
+      // path directly, so a PATH refresh isn't required for the app itself
+      // to find it - only for typing "ffmpeg" at a fresh command prompt.
+      if not (IsFfmpegInstalled() or FileExists('C:\Program Files\ffmpeg\bin\ffmpeg.exe')) then
+        MsgBox('ffmpeg installation could not be confirmed. If winget succeeded, ' +
+               'MeetingScribe should still find it automatically - launch it and try ' +
+               'a file. Otherwise install manually: https://www.gyan.dev/ffmpeg/builds/',
+               mbInformation, MB_OK);
+    end
+    else
+      MsgBox('Install ffmpeg from https://www.gyan.dev/ffmpeg/builds/, then launch MeetingScribe again.',
+             mbInformation, MB_OK);
+  end;
+end;
+
 function VenvPythonPath(): String;
 begin
   Result := ExpandConstant('{app}\venv\Scripts\python.exe');
@@ -185,6 +226,9 @@ begin
       WizardForm.Update;
       SetupVenvAndPySide6();
     end;
+    WizardForm.StatusLabel.Caption := 'Checking ffmpeg installation...';
+    WizardForm.Update;
+    InstallFfmpegIfMissing();
     WizardForm.StatusLabel.Caption := 'Finishing up...';
     WizardForm.Update;
   end;
