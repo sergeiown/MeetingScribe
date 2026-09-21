@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._apply_initial_geometry()
-        self._refresh_file_list()
+        self._refresh_file_list(select_all=False)
         self._refresh_model_choices()
         self._refresh_diarize_availability()
         # Delayed so it never competes with startup itself for network/CPU,
@@ -132,13 +132,12 @@ class MainWindow(QMainWindow):
         self._file_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self._file_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._file_table.setShowGrid(False)
-        self._file_table.setFixedHeight(180)
         header = self._file_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         for col_idx in (1, 2, 3):
             header.setSectionResizeMode(col_idx, QHeaderView.ResizeToContents)
         self._file_table.itemSelectionChanged.connect(self._refresh_diarize_button)
-        files_layout.addWidget(self._file_table)
+        files_layout.addWidget(self._file_table, stretch=1)
 
         self._empty_hint = QLabel(tr("No files yet - click \"Add files...\" or drop some into input\\"))
         self._empty_hint.setProperty("hint", True)
@@ -157,7 +156,9 @@ class MainWindow(QMainWindow):
         file_btn_row.addWidget(self._delete_btn)
         file_btn_row.addStretch()
         files_layout.addLayout(file_btn_row)
-        col.addWidget(self._files_box)
+        # Equal stretch with the transcript box below: a fixed 50/50 split
+        # of the column regardless of whether there are files to list.
+        col.addWidget(self._files_box, stretch=1)
 
         # --- Transcript ---------------------------------------------------------
         self._transcript_box = QGroupBox(tr("Transcript"))
@@ -320,7 +321,7 @@ class MainWindow(QMainWindow):
 
     # --- refresh helpers -------------------------------------------------
 
-    def _refresh_file_list(self):
+    def _refresh_file_list(self, select_all=True):
         self._file_table.setRowCount(0)
         core.ensure_workdirs()
         files = sorted(
@@ -356,9 +357,12 @@ class MainWindow(QMainWindow):
             self._file_table.setItem(row, 1, size_item)
             self._file_table.setItem(row, 2, dur_item)
             self._file_table.setItem(row, 3, status_item)
-        # Selects everything by default; selection is the actual source of
-        # truth for what Start processes, not a fallback.
-        self._file_table.selectAll()
+        # Selection is the actual source of truth for what Start processes,
+        # not a fallback - so it defaults to everything selected after an
+        # action the user just took (add/delete/finished a run), but not on
+        # startup, where the user should choose what to run themselves.
+        if select_all:
+            self._file_table.selectAll()
 
     def _refresh_model_choices(self):
         self._model_combo.clear()
