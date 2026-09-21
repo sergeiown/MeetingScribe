@@ -5,7 +5,7 @@ import time
 import core
 
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QProgressBar
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QProgressBar, QSizePolicy
 
 from .i18n import tr
 
@@ -66,6 +66,14 @@ class ModelRowWidget(QFrame):
         self._download_btn.clicked.connect(self.download_requested.emit)
         top_row.addWidget(self._download_btn)
         outer.addLayout(top_row)
+
+        # The button (tallest element, via its padding) reserves its height
+        # even while hidden, so a row doesn't get visibly shorter once its
+        # model is installed and the button disappears - every row in the
+        # list then lines up at the same height regardless of state.
+        policy = self._download_btn.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)
+        self._download_btn.setSizePolicy(policy)
 
         if description:
             desc_label = _ElidedLabel(description)
