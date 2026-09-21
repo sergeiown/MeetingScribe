@@ -341,40 +341,49 @@ class GeneralTab(QWidget):
         cpu_row.addStretch()
         box_layout.addLayout(cpu_row)
 
-        if not gpu_name:
-            return box
+        if gpu_name:
+            gpu_row = QHBoxLayout()
+            gpu_icon = QLabel()
+            gpu_icon.setPixmap(QPixmap(str(gpu_icon_path(gpu_name))).scaled(
+                16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            gpu_row.addWidget(gpu_icon)
+            gpu_label_text = (tr("GPU: {name}", name=gpu_name) if gpu_supported
+                              else tr("GPU: {name} (not supported for acceleration)", name=gpu_name))
+            gpu_row.addWidget(QLabel(gpu_label_text))
+            gpu_row.addStretch()
+            box_layout.addLayout(gpu_row)
 
-        gpu_row = QHBoxLayout()
-        gpu_icon = QLabel()
-        gpu_icon.setPixmap(QPixmap(str(gpu_icon_path(gpu_name))).scaled(
-            16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        gpu_row.addWidget(gpu_icon)
-        gpu_label_text = (tr("GPU: {name}", name=gpu_name) if gpu_supported
-                          else tr("GPU: {name} (not supported for acceleration)", name=gpu_name))
-        gpu_row.addWidget(QLabel(gpu_label_text))
-        gpu_row.addStretch()
-        box_layout.addLayout(gpu_row)
+        if gpu_supported:
+            # Only meaningful when both a CPU and a supported GPU are present.
+            box_layout.addWidget(QLabel(tr("Use for processing:")))
+            self._device_combo = QComboBox()
+            self._device_combo.addItem(tr("Automatic (use GPU - recommended)"), "auto")
+            self._device_combo.addItem(tr("CPU only"), "cpu")
+            idx = self._device_combo.findData(get_device_preference())
+            self._device_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            self._device_combo.currentIndexChanged.connect(
+                lambda _i: set_device_preference(self._device_combo.currentData()))
+            box_layout.addWidget(self._device_combo)
 
-        if not gpu_supported:
-            # GPU present but not one this app's CUDA-only acceleration can use.
-            return box
-
-        # Only shown when both a CPU and a supported GPU are present.
-        box_layout.addWidget(QLabel(tr("Use for processing:")))
-        self._device_combo = QComboBox()
-        self._device_combo.addItem(tr("Automatic (use GPU - recommended)"), "auto")
-        self._device_combo.addItem(tr("CPU only"), "cpu")
-        idx = self._device_combo.findData(get_device_preference())
-        self._device_combo.setCurrentIndex(idx if idx >= 0 else 0)
-        self._device_combo.currentIndexChanged.connect(
-            lambda _i: set_device_preference(self._device_combo.currentData()))
-        box_layout.addWidget(self._device_combo)
-
-        explanation = QLabel(tr(
-            "The GPU is much faster for speech recognition and speaker "
-            "identification, especially with larger models. CPU works "
-            "everywhere and leaves the GPU free for other tasks (e.g. "
-            "gaming) while processing."))
+        # Always shown, tailored to the actual configuration - CPU-only
+        # setups still deserve to know why (and that it's normal, just slower).
+        if gpu_supported:
+            explanation_text = tr(
+                "The GPU is much faster for speech recognition and speaker "
+                "identification, especially with larger models. CPU works "
+                "everywhere and leaves the GPU free for other tasks (e.g. "
+                "gaming) while processing.")
+        elif gpu_name:
+            explanation_text = tr(
+                "This GPU isn't supported for acceleration here (NVIDIA/CUDA "
+                "only), so everything runs on the CPU instead. It still "
+                "works fine, just slower - especially with larger models.")
+        else:
+            explanation_text = tr(
+                "No GPU detected, so everything runs on the CPU. It works "
+                "fine, just slower than a GPU would be, especially with "
+                "larger models - an NVIDIA GPU would speed this up automatically.")
+        explanation = QLabel(explanation_text)
         explanation.setWordWrap(True)
         explanation.setProperty("hint", True)
         box_layout.addWidget(explanation)
@@ -393,7 +402,7 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Settings"))
-        self.resize(780, 520)
+        self.resize(780, 700)
         layout = QVBoxLayout(self)
 
         tabs = QTabWidget()
@@ -413,6 +422,10 @@ class SettingsDialog(QDialog):
         self.models_tab._write_token()
         self.accept()
 
-    def closeEvent(self, event):
+    def done(self, result):
+        # The single path accept()/reject()/closeEvent() all funnel through -
+        # covers "Save and Close", Escape, and the window's X equally, so a
+        # still-running download can never outlive the widgets it reports
+        # progress to (see cleanup_active_downloads()).
         self.models_tab.cleanup_active_downloads()
-        super().closeEvent(event)
+        super().done(result)

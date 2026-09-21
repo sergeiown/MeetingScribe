@@ -194,6 +194,18 @@ _UK = {
         "спікерів, особливо з важчими моделями. CPU працює завжди і "
         "залишає GPU вільним для інших задач (наприклад, ігор) під час "
         "обробки.",
+    "This GPU isn't supported for acceleration here (NVIDIA/CUDA "
+    "only), so everything runs on the CPU instead. It still "
+    "works fine, just slower - especially with larger models.":
+        "Ця GPU тут не підтримується для прискорення (лише NVIDIA/CUDA), "
+        "тож усе працює на CPU. Це нормально, просто повільніше - "
+        "особливо з важчими моделями.",
+    "No GPU detected, so everything runs on the CPU. It works "
+    "fine, just slower than a GPU would be, especially with "
+    "larger models - an NVIDIA GPU would speed this up automatically.":
+        "GPU не знайдено, тож усе працює на CPU. Це нормально, просто "
+        "повільніше, ніж було б з GPU, особливо з важчими моделями - "
+        "відеокарта NVIDIA автоматично пришвидшила б обробку.",
     "Models": "Моделі",
     "Speakers": "Спікери",
     "General": "Загальні",
