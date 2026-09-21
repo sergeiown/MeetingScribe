@@ -389,23 +389,34 @@ def export_speakers(paths: Optional[list] = None, dest_zip: Path = None) -> int:
     return len(paths)
 
 
-def import_speakers(zip_path: Path, speakers_dir: Path = SPEAKERS_DIR) -> int:
-    """Imports .npy voiceprints from a zip made by export_speakers(). Never
-    overwrites an existing file - a name collision is saved as a new version instead, so import can't destroy an enrollment."""
-    import zipfile
-
+def import_speakers(path: Path, speakers_dir: Path = SPEAKERS_DIR) -> int:
+    """Imports .npy voiceprints from either a single .npy file or a zip made
+    by export_speakers(). Never overwrites an existing file - a name
+    collision is saved as a new version instead, so import can't destroy an
+    enrollment."""
     speakers_dir.mkdir(parents=True, exist_ok=True)
     count = 0
-    with zipfile.ZipFile(zip_path, "r") as zf:
+
+    def save_one(name: str, data: bytes) -> None:
+        nonlocal count
+        dest = speakers_dir / name
+        if dest.exists():
+            base = base_speaker_name(Path(name).stem)
+            dest = speakers_dir / f"{next_versioned_name(base, speakers_dir)}.npy"
+        dest.write_bytes(data)
+        count += 1
+
+    if path.suffix.lower() == ".npy":
+        save_one(path.name, path.read_bytes())
+        return count
+
+    import zipfile
+
+    with zipfile.ZipFile(path, "r") as zf:
         for info in zf.infolist():
             name = Path(info.filename).name
             if not name.lower().endswith(".npy") or info.is_dir():
                 continue
-            dest = speakers_dir / name
-            if dest.exists():
-                base = base_speaker_name(Path(name).stem)
-                dest = speakers_dir / f"{next_versioned_name(base, speakers_dir)}.npy"
-            with zf.open(info) as src, open(dest, "wb") as out:
-                out.write(src.read())
-            count += 1
+            with zf.open(info) as src:
+                save_one(name, src.read())
     return count

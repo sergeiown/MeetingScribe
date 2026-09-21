@@ -322,7 +322,9 @@ class SpeakersTab(QWidget):
             QMessageBox.warning(self, tr("Export failed"), tr("Could not write the export file:\n\n{error}", error=str(e)))
 
     def _on_import(self):
-        src, _ = QFileDialog.getOpenFileName(self, tr("Import speakers"), "", "Zip files (*.zip)")
+        src, _ = QFileDialog.getOpenFileName(
+            self, tr("Import speakers"), "",
+            tr("Speaker files (*.zip *.npy);;Zip files (*.zip);;NumPy files (*.npy)"))
         if not src:
             return
         try:
@@ -468,6 +470,13 @@ class SettingsDialog(QDialog):
     def _on_save_and_close(self):
         self.models_tab._write_token()
         self.accept()
+
+    def reject(self):
+        # The window's X and Escape both call reject() by default, which
+        # would close without saving the token - route them through the same
+        # save-and-close path as the button instead, so every way of closing
+        # this dialog behaves identically.
+        self._on_save_and_close()
 
     def done(self, result):
         # The single path accept()/reject()/closeEvent() all funnel through -
