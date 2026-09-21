@@ -112,6 +112,76 @@ class DiarizationWorker(_QueueProcessWorker):
         self._args = (files, hf_token, num_speakers, device_preference)
 
 
+class ModelDownloadProcessWorker(QObject):
+    """Whisper/pyannote model downloads, run in a separate OS process (see
+    process_worker.run_model_download_process) specifically so Stop can
+    guarantee a real stop: huggingface_hub's snapshot_download() has no
+    cancel hook, so on a QThread a "cancelled" download's network transfer
+    just kept running unsupervised in an orphaned thread until it finished
+    on its own. Killing the whole process is the only way to actually stop
+    it - the update installer's hand-rolled chunked download doesn't have
+    this problem and stays on ModelDownloadWorker."""
+
+    progress = Signal(float, float, str)
+    finished = Signal()
+    failed = Signal(str)
+
+    def __init__(self, kind, args, hf_token):
+        super().__init__()
+        from .process_worker import run_model_download_process
+        self._target = run_model_download_process
+        self._args = (kind, args, hf_token)
+        self._progress_q = mp.Queue()
+        self._cancel_event = mp.Event()
+        self._process = None
+        self._cancelled = False
+        self._poll_timer = QTimer(self)
+        self._poll_timer.timeout.connect(self._poll)
+
+    def run(self):
+        self._process = mp.Process(
+            target=self._target, args=(*self._args, self._progress_q, self._cancel_event), daemon=True)
+        self._process.start()
+        self._poll_timer.start(100)
+
+    def cancel(self):
+        # Synchronous and idempotent: by the time this returns, the process
+        # is gone and failed() has fired exactly once - a caller closing the
+        # dialog right after can rely on nothing still running in the
+        # background, without needing its own separate wait step.
+        if not self._poll_timer.isActive():
+            return
+        self._cancelled = True
+        self._cancel_event.set()
+        if self._process is not None and self._process.is_alive():
+            self._process.terminate()
+            self._process.join(timeout=2.0)
+        self._poll_timer.stop()
+        self.failed.emit("")
+
+    def _poll(self):
+        try:
+            while True:
+                msg = self._progress_q.get_nowait()
+                kind = msg[0]
+                if kind == "progress":
+                    self.progress.emit(msg[1], msg[2], msg[3])
+                elif kind == "finished":
+                    self._poll_timer.stop()
+                    self.finished.emit()
+                    return
+                elif kind in ("cancelled", "failed"):
+                    self._poll_timer.stop()
+                    self.failed.emit(msg[1] if kind == "failed" else "")
+                    return
+        except queue.Empty:
+            pass
+        if self._process is not None and not self._process.is_alive() and self._poll_timer.isActive():
+            self._poll_timer.stop()
+            self.failed.emit("" if self._cancelled else
+                              f"Download process exited unexpectedly (code {self._process.exitcode}).")
+
+
 class ModelDownloadWorker(QObject):
     progress = Signal(float, float, str)
     finished = Signal()

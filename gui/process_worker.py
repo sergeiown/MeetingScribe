@@ -190,6 +190,32 @@ def _diarize_and_label(core, wav_path, segments, hf_token, num_speakers, device_
     return "\n".join(lines).strip()
 
 
+def run_model_download_process(kind, args, hf_token, progress_q, cancel_event):
+    """Entry point for a model download's child process. huggingface_hub's
+    snapshot_download() has no cancel hook, so a Stop click can only ever
+    really take effect by killing this whole process (see
+    ModelDownloadProcessWorker.cancel() in workers.py) - cancel_event is
+    still checked between files for a faster stop when the timing lines up."""
+    import core
+
+    cancel_token = ProcessCancelToken(cancel_event)
+
+    def on_progress(cur, total, label):
+        progress_q.put(("progress", cur, total, label))
+
+    try:
+        if kind == "whisper":
+            key, hf_repo = args
+            core.download_whisper_model(key, hf_repo, hf_token, cancel_token=cancel_token, on_progress=on_progress)
+        else:
+            core.download_diarization_models(hf_token, cancel_token=cancel_token, on_progress=on_progress)
+        progress_q.put(("finished",))
+    except core.Cancelled:
+        progress_q.put(("cancelled",))
+    except Exception as e:
+        progress_q.put(("failed", str(e)))
+
+
 def _diarization_error_message(de):
     err_str = str(de)
     if any(s in err_str for s in ("401", "403")) or "gated" in err_str.lower() or "restricted" in err_str.lower():

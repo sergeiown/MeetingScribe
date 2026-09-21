@@ -4,7 +4,7 @@ from pathlib import Path
 
 import core
 
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
@@ -16,8 +16,8 @@ from .device_prefs import get_device_preference, set_device_preference
 from .hardware_icons import cpu_icon_path, gpu_icon_path
 from .i18n import tr, available_languages, get_language, set_language
 from .style import apply_theme, get_theme_preference, set_theme_preference
-from .widgets import ModelRowWidget
-from .workers import ModelDownloadWorker
+from .widgets import ModelRowWidget, fit_action_button_width
+from .workers import ModelDownloadProcessWorker
 
 _PYANNOTE_NOTE = (
     "Gated models - accept the license while logged in to Hugging Face:<br>"
@@ -93,6 +93,7 @@ class ModelsTab(QWidget):
         self._token_visible = False
         token_row.addWidget(self._token_edit, stretch=1)
         save_token_btn = QPushButton(tr("Save token"))
+        fit_action_button_width(save_token_btn)
         save_token_btn.clicked.connect(self._save_token)
         token_row.addWidget(save_token_btn)
         token_card_layout.addLayout(token_row)
@@ -132,21 +133,13 @@ class ModelsTab(QWidget):
         self.refresh_token_state()
 
     def _start_download(self, spec):
-        token = core.read_hf_token()
-
-        def fn(ct, on_progress, spec=spec, token=token):
-            core.download_whisper_model(spec.key, spec.hf_repo, token, cancel_token=ct, on_progress=on_progress)
-
         row, _ = self._rows[spec.key]
-        self._run_download(row, fn, lambda spec=spec: core.is_whisper_installed(spec.key))
+        worker = ModelDownloadProcessWorker("whisper", (spec.key, spec.hf_repo), core.read_hf_token())
+        self._run_download(row, worker, lambda spec=spec: core.is_whisper_installed(spec.key))
 
     def _start_diarization_download(self):
-        token = core.read_hf_token()
-
-        def fn(ct, on_progress, token=token):
-            core.download_diarization_models(token, cancel_token=ct, on_progress=on_progress)
-
-        self._run_download(self._diarization_row, fn, core.is_diarization_complete)
+        worker = ModelDownloadProcessWorker("diarization", (), core.read_hf_token())
+        self._run_download(self._diarization_row, worker, core.is_diarization_complete)
 
     def _delete_whisper(self, spec):
         if QMessageBox.question(
@@ -167,49 +160,37 @@ class ModelsTab(QWidget):
         core.delete_diarization_models()
         self._diarization_row.set_installed(False)
 
-    def _run_download(self, row, fn, check_installed):
-        # worker.finished also fires on a cooperative cancel (see
-        # ModelDownloadWorker.run()'s except Cancelled branch) - checking the
-        # real on-disk state here, rather than trusting the signal alone,
-        # keeps a Stop-clicked row from being mislabeled "Installed".
+    def _run_download(self, row, worker, check_installed):
+        # worker.finished only ever fires on genuine completion now (see
+        # ModelDownloadProcessWorker) - failed() covers both a real error and
+        # a deliberate Stop (empty message), so a stopped row always reverts
+        # to "Not installed" instead of being mislabeled "Installed".
         def on_finished():
-            if check_installed():
-                row.set_done(True)
+            row.set_done(check_installed())
+
+        def on_failed(err):
+            if err:
+                row.set_done(False, err)
             else:
                 row.set_installed(False)
 
-        thread = QThread()
-        worker = ModelDownloadWorker(fn)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
         worker.progress.connect(row.set_downloading)
         worker.finished.connect(on_finished)
-        worker.failed.connect(lambda err: row.set_done(False, err))
-        worker.finished.connect(thread.quit)
-        worker.failed.connect(thread.quit)
-        thread.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        # DirectConnection: while run() is mid-loop, worker's own thread isn't
-        # spinning its event loop, so a normal (queued) cross-thread
-        # connection here would just sit undelivered until run() returns on
-        # its own - cancel_token.cancel() only touches a threading.Event, so
-        # calling it synchronously from the GUI thread is safe.
-        row.cancel_requested.connect(worker.cancel, Qt.DirectConnection)
-        entry = (thread, worker)
-        self._active_downloads.append(entry)
-        thread.finished.connect(lambda: self._active_downloads.remove(entry) if entry in self._active_downloads else None)
-        thread.start()
+        worker.failed.connect(on_failed)
+        row.cancel_requested.connect(worker.cancel)
+        self._active_downloads.append(worker)
+        worker.finished.connect(lambda: self._active_downloads.remove(worker) if worker in self._active_downloads else None)
+        worker.failed.connect(lambda _err: self._active_downloads.remove(worker) if worker in self._active_downloads else None)
+        worker.run()
 
     def cleanup_active_downloads(self):
-        """Called when Settings is about to close: quits and waits on each
-        still-running download thread first. A running QThread losing its
-        last Python reference (this tab's _active_downloads is the only
-        thing keeping it alive) crashes the process with "QThread:
-        Destroyed while thread is still running"."""
-        for thread, worker in list(self._active_downloads):
+        """Called when Settings is about to close: force-stops any download
+        still running. Real process termination (see
+        ModelDownloadProcessWorker.cancel()), not a cooperative request, and
+        synchronous - by the time this returns nothing is left running in
+        the background."""
+        for worker in list(self._active_downloads):
             worker.cancel()
-            thread.quit()
-            thread.wait()
 
 
 class SpeakersTab(QWidget):
@@ -356,8 +337,14 @@ class GeneralTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
+        # Generous gap between blocks (theme / language / hardware); each
+        # block keeps its own label snug against its control (see below).
+        layout.setSpacing(22)
+        layout.setContentsMargins(12, 16, 12, 16)
 
-        layout.addWidget(QLabel(tr("Theme:")))
+        theme_block = QVBoxLayout()
+        theme_block.setSpacing(8)
+        theme_block.addWidget(QLabel(tr("Theme:")))
         self._theme_combo = QComboBox()
         self._theme_combo.addItem(tr("System (auto)"), "auto")
         self._theme_combo.addItem(tr("Light"), "light")
@@ -366,9 +353,12 @@ class GeneralTab(QWidget):
         if idx >= 0:
             self._theme_combo.setCurrentIndex(idx)
         self._theme_combo.currentIndexChanged.connect(self._on_theme_changed)
-        layout.addWidget(self._theme_combo)
+        theme_block.addWidget(self._theme_combo)
+        layout.addLayout(theme_block)
 
-        layout.addWidget(QLabel(tr("Interface language:")))
+        lang_block = QVBoxLayout()
+        lang_block.setSpacing(8)
+        lang_block.addWidget(QLabel(tr("Interface language:")))
         self._ui_lang_combo = QComboBox()
         for code, name in available_languages():
             self._ui_lang_combo.addItem(name, code)
@@ -376,7 +366,8 @@ class GeneralTab(QWidget):
         if idx >= 0:
             self._ui_lang_combo.setCurrentIndex(idx)
         self._ui_lang_combo.currentIndexChanged.connect(self._on_ui_language_changed)
-        layout.addWidget(self._ui_lang_combo)
+        lang_block.addWidget(self._ui_lang_combo)
+        layout.addLayout(lang_block)
 
         layout.addWidget(self._build_hardware_box())
         layout.addStretch()
@@ -384,6 +375,7 @@ class GeneralTab(QWidget):
     def _build_hardware_box(self):
         box = QGroupBox(tr("Hardware"))
         box_layout = QVBoxLayout(box)
+        box_layout.setSpacing(10)
 
         cpu_name, gpu_name, gpu_supported = core.detect_hardware_info()
 

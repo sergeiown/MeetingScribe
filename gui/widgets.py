@@ -9,6 +9,21 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushBut
 
 from .i18n import tr
 
+# Every button that can appear in this row-of-cards area, so they all end up
+# the same width - Save token (in the token card) included, even though it
+# lives outside ModelRowWidget itself (see settings_dialog.py).
+ACTION_BUTTON_LABELS = ("Download", "Stop", "Delete", "Save token")
+
+
+def fit_action_button_width(button: QPushButton) -> None:
+    widths = []
+    original = button.text()
+    for text in ACTION_BUTTON_LABELS:
+        button.setText(tr(text))
+        widths.append(button.sizeHint().width())
+    button.setText(original)
+    button.setFixedWidth(max(widths))
+
 
 class _ElidedLabel(QLabel):
     """A single-line label that elides its text to fit the current width
@@ -69,17 +84,9 @@ class ModelRowWidget(QFrame):
 
         self._action_btn = QPushButton()
         self._action_btn.clicked.connect(self._on_action_clicked)
+        fit_action_button_width(self._action_btn)
         top_row.addWidget(self._action_btn)
         outer.addLayout(top_row)
-
-        # Fixed to the widest of the three possible labels, so Download/Stop/
-        # Delete line up on both edges across rows instead of each hugging
-        # its own text width.
-        widths = []
-        for text in (tr("Download"), tr("Stop"), tr("Delete")):
-            self._action_btn.setText(text)
-            widths.append(self._action_btn.sizeHint().width())
-        self._action_btn.setFixedWidth(max(widths))
 
         if description:
             desc_label = _ElidedLabel(description)
