@@ -132,19 +132,45 @@ def whisper_model_bytes(spec: ModelSpec, hf_token: Optional[str] = None) -> int:
     return _repo_total_bytes(spec.hf_repo, hf_token)
 
 
+_TRANSIENT_ERROR_MARKERS = (
+    "10054", "10053",  # WinError: connection reset/aborted by remote host
+    "connectionerror", "connectionreseterror", "remotedisconnected",
+    "connection aborted", "connection reset", "read timed out", "timeout",
+)
+_MAX_TRANSIENT_RETRIES = 4
+
+
+def _is_transient_network_error(e: Exception) -> bool:
+    text = str(e).lower()
+    return any(m in text for m in _TRANSIENT_ERROR_MARKERS)
+
+
 def _run_with_progress(download_fn, local_dir: Path, total: int,
                         cancel_token: Optional[CancelToken],
                         on_progress: Optional[ProgressFn]) -> None:
     """Runs download_fn() on a background thread, polling local_dir's size
     for progress. snapshot_download() has no cancel hook - cancel_token
-    only stops our polling; the transfer itself keeps running to completion."""
+    only stops our polling; the transfer itself keeps running to completion.
+
+    A transient connection drop (WinError 10054 and similar) retries a few
+    times with backoff instead of failing outright - snapshot_download()
+    resumes an interrupted file from its own on-disk cache rather than
+    starting over, so a retry is cheap, not a full redownload."""
     err = {}
 
     def worker():
-        try:
-            download_fn()
-        except Exception as ex:
-            err["ex"] = ex
+        for attempt in range(_MAX_TRANSIENT_RETRIES + 1):
+            try:
+                download_fn()
+                return
+            except Exception as ex:
+                if cancel_token and cancel_token.is_cancelled():
+                    err["ex"] = ex
+                    return
+                if attempt >= _MAX_TRANSIENT_RETRIES or not _is_transient_network_error(ex):
+                    err["ex"] = ex
+                    return
+                time.sleep(min(3 * (attempt + 1), 15))
 
     t = threading.Thread(target=worker, daemon=True)
     t.start()
