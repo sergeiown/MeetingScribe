@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPlainTextEdit, QProgressBar, QMessageBox
 
 import core
@@ -219,6 +219,12 @@ class BootstrapDialog(QDialog):
                  model_spec=None, hf_token: str = "", parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("MeetingScribe - Setting up"))
+        # This is typically the very first window shown (parent=None, before
+        # MainWindow exists) - explicit rather than relying on the
+        # QApplication-wide default to propagate in time for the taskbar.
+        icon_path = core.SCRIPT_DIR / "img" / "icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.setModal(True)
         self.setMinimumWidth(480)
         # No Cancel button - these components are mandatory, the app can't

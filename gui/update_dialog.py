@@ -5,6 +5,7 @@ quit()+wait()-before-close() ordering (see _on_finished)."""
 from pathlib import Path
 
 from PySide6.QtCore import QThread
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QProgressBar, QDialogButtonBox
 
 import core
@@ -27,6 +28,9 @@ class UpdateDownloadDialog(QDialog):
     def __init__(self, url: str, dest_path: Path, total_size: int, version: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Downloading update"))
+        icon_path = core.SCRIPT_DIR / "img" / "icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.setModal(True)
         self.setMinimumWidth(420)
         self.installer_path = None
