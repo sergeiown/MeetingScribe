@@ -647,6 +647,7 @@ class MainWindow(QMainWindow):
         self._refresh_file_list()
 
     def _begin_run(self, file_count):
+        core.set_sleep_prevention(True)
         self._transcript_view.clear()
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setValue(0)
@@ -815,6 +816,7 @@ class MainWindow(QMainWindow):
         self._status_label.setText(tr("Cancelled."))
 
     def _reset_run_state(self):
+        core.set_sleep_prevention(False)
         self._transcribe_btn.setEnabled(True)
         self._cancel_btn.setEnabled(False)
         self._worker = None
