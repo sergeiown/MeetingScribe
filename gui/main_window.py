@@ -651,9 +651,12 @@ class MainWindow(QMainWindow):
         if get_prevent_sleep_preference():
             core.set_sleep_prevention(True)
         self._transcript_view.clear()
-        self._progress_bar.setRange(0, 100)
-        self._progress_bar.setValue(0)
-        self._progress_bar.setFormat("%p%")
+        # Indeterminate (busy) until the first real progress update arrives -
+        # a large model can take a long time to load, with no progress
+        # events during that stretch, so a static "0%" bar reads as frozen.
+        self._status_label.setText(tr("Starting..."))
+        self._progress_bar.setRange(0, 0)
+        self._progress_bar.setFormat("")
         self._overall_progress_bar.setRange(0, file_count)
         self._overall_progress_bar.setValue(0)
         self._progress_phase = None
