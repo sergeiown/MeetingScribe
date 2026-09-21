@@ -17,7 +17,7 @@ from .update_check import (
     spawn_installer, UPDATE_DOWNLOAD_DIR,
 )
 from .paths import (
-    SCRIPT_DIR, INPUT_DIR, OUTPUT_DIR, MODELS_DIR, LOGS_DIR, SPEAKERS_DIR, SAMPLES_DIR,
+    SCRIPT_DIR, INPUT_DIR, OUTPUT_DIR, MODELS_DIR, LOGS_DIR, SPEAKERS_DIR, SAMPLES_DIR, SEGMENTS_DIR,
     SUPPORTED_EXTENSIONS, ensure_workdirs,
 )
 from .logging_setup import init_logger, log_ml_versions
@@ -59,7 +59,7 @@ from .results import save_result, save_segments, load_segments, file_status
 __all__ = [
     "VERSION", "GITHUB_REPO", "check_for_update",
     "download_installer", "cleanup_update_downloads", "spawn_installer", "UPDATE_DOWNLOAD_DIR",
-    "SCRIPT_DIR", "INPUT_DIR", "OUTPUT_DIR", "MODELS_DIR", "LOGS_DIR", "SPEAKERS_DIR", "SAMPLES_DIR",
+    "SCRIPT_DIR", "INPUT_DIR", "OUTPUT_DIR", "MODELS_DIR", "LOGS_DIR", "SPEAKERS_DIR", "SAMPLES_DIR", "SEGMENTS_DIR",
     "SUPPORTED_EXTENSIONS", "ensure_workdirs",
     "init_logger", "log_ml_versions",
     "Cancelled", "CancelToken", "ProgressFn", "StatusFn",

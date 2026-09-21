@@ -1,10 +1,12 @@
-"""Writes the final transcript to output/, plus a sidecar of raw segments and
-diarization status so a later "identify speakers" pass can skip re-transcribing."""
+"""Writes the final transcript to output/, plus a per-file segments/
+diarization-status sidecar under the internal .segments/ (not output/ itself -
+see paths.SEGMENTS_DIR) so a later "identify speakers" pass can skip
+re-transcribing."""
 
 import json
 from pathlib import Path
 
-from .paths import OUTPUT_DIR
+from .paths import OUTPUT_DIR, SEGMENTS_DIR
 
 
 def save_result(file_path: Path, text: str) -> Path:
@@ -15,11 +17,11 @@ def save_result(file_path: Path, text: str) -> Path:
 
 
 def _segments_sidecar_path(file_path: Path) -> Path:
-    return OUTPUT_DIR / (file_path.stem + ".segments.json")
+    return SEGMENTS_DIR / (file_path.stem + ".segments.json")
 
 
 def save_segments(file_path: Path, segments, *, diarized: bool) -> None:
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    SEGMENTS_DIR.mkdir(exist_ok=True)
     data = {
         "diarized": diarized,
         "segments": [{"start": s.start, "end": s.end, "text": s.text} for s in segments],

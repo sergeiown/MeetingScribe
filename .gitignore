@@ -5,6 +5,7 @@ speakers/
 input/
 output/
 logs/
+.segments/
 
 __pycache__/
 *.pyc
