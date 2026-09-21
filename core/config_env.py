@@ -33,12 +33,9 @@ def read_hf_token(path: Path = CONFIG_ENV_PATH) -> str:
 
 
 def write_config_env(updates: dict, path: Path = CONFIG_ENV_PATH) -> None:
-    """Rewrite `path`, preserving every existing line verbatim except the
-    keys being updated (replaced in place); keys not found are appended.
-    Seeds from config.env.example if `path` doesn't exist yet. Writes
-    atomically (temp file + os.replace) so a crash mid-write can't corrupt
-    the file.
-    """
+    """Preserves existing lines verbatim except updated keys (in place;
+    unmatched keys appended); seeds from config.env.example if `path` is
+    missing. Writes via temp file + os.replace so a crash can't corrupt it."""
     if path.exists():
         lines = path.read_text(encoding="utf-8").splitlines()
     elif CONFIG_ENV_EXAMPLE_PATH.exists():
@@ -66,14 +63,9 @@ def write_config_env(updates: dict, path: Path = CONFIG_ENV_PATH) -> None:
 
 
 def has_diarization_support() -> bool:
-    """A presence check only (importlib.util.find_spec, not a real import).
-
-    This is called often from the main GUI process (every file-selection
-    change), and a real `import torch`/`import pyannote.audio` there would
-    both be slow and - worse - reintroduce the exact same-process
-    matplotlib/Qt conflict that the ML pipeline's process isolation exists
-    to avoid (see gui/process_worker.py's module docstring). Actually
-    importing these is only ever safe inside that isolated child process."""
+    """Presence check only (find_spec, not a real import) - a real import
+    here would reintroduce the matplotlib/Qt conflict process isolation
+    exists to avoid (see gui/process_worker.py)."""
     return (importlib.util.find_spec("torch") is not None
             and importlib.util.find_spec("pyannote.audio") is not None)
 

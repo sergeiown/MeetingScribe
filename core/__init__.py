@@ -1,21 +1,14 @@
 """MeetingScribe core: presentation-agnostic transcription/diarization/speaker logic.
 
-Shared by the GUI (and any future frontend). Nothing here prints, reads
-stdin, or otherwise assumes a console - progress/status/decisions are all
-passed in as optional callbacks by the caller.
+Nothing here prints or reads stdin - progress/status/decisions are passed
+in as optional callbacks by the caller.
 """
 
 import os
 
-# huggingface_hub reads this into a module-level constant the moment it's
-# first imported, so it must be set before that import happens anywhere in
-# the process - this module is that earliest point. Verified by direct
-# testing: with Xet enabled, downloading a large file (whisper "small"'s
-# ~460 MB model.bin) repeatedly stalls for minutes at a time (bytes-written
-# flat while the process's memory keeps growing) - the exact "app just
-# doesn't start" symptom, since the first-run model download would appear
-# to hang forever. Disabling Xet falls back to plain HTTP, which completed
-# the same download in 98s with zero stalls.
+# huggingface_hub reads this into a module-level constant on first import,
+# so it must be set here, before huggingface_hub is imported anywhere else.
+# Xet transfer can stall indefinitely on large downloads; HTTP fallback doesn't.
 os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
 from .version import VERSION, GITHUB_REPO

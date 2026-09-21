@@ -58,9 +58,8 @@ class MainWindow(QMainWindow):
         self._check_for_updates(manual=False)
 
     def _apply_initial_geometry(self):
-        """Size the window to fit the actual screen (important on laptops
-        with display scaling, where a fixed pixel size can exceed the
-        available desktop area), and center it."""
+        """Fits the window to the available screen area (a fixed pixel size
+        can exceed it on scaled displays) and centers it."""
         screen = self.screen() or QApplication.primaryScreen()
         avail = screen.availableGeometry()
         width = max(_MIN_WIDTH, min(_PREFERRED_WIDTH, int(avail.width() * 0.9)))
@@ -69,9 +68,7 @@ class MainWindow(QMainWindow):
         self.move(avail.center().x() - width // 2, avail.center().y() - height // 2)
 
     def _build_ui(self):
-        # A QMenuBar instead of a QToolBar: same slim, standard OS-native
-        # height, but its content (Settings, Help > About, Exit) is expected
-        # chrome rather than a mostly-empty bar taking up its own row.
+        # QMenuBar instead of QToolBar: same slim height, without a mostly-empty toolbar row.
         menu_bar = self.menuBar()
         self._settings_action = QAction(tr("Settings"), self)
         self._settings_action.triggered.connect(self._open_settings)
@@ -164,9 +161,8 @@ class MainWindow(QMainWindow):
         self._options_box = QGroupBox(tr("Options"))
         options_form = QFormLayout(self._options_box)
         options_form.setVerticalSpacing(10)
-        # Labels above fields (not side-by-side) so a longer translated
-        # label (e.g. Ukrainian "Модель:") never gets squeezed/clipped by
-        # the fixed sidebar width - width no longer depends on label length.
+        # Labels above fields, not side-by-side, so a longer translated label isn't
+        # clipped by the fixed sidebar width.
         options_form.setRowWrapPolicy(QFormLayout.WrapAllRows)
         self._model_combo = QComboBox()
         self._lang_combo = QComboBox()
@@ -256,9 +252,8 @@ class MainWindow(QMainWindow):
     # --- i18n --------------------------------------------------------------
 
     def retranslate_ui(self):
-        """Re-applies all static text after a language change in Settings.
-        Dynamic log-style content already written into the transcript view
-        is left as-is - only the app's own chrome is re-labeled."""
+        """Re-applies static text after a language change; content already
+        written into the transcript view is left as-is."""
         self._settings_action.setText(tr("Settings"))
         self._help_menu.setTitle(tr("Help"))
         self._check_updates_action.setText(tr("Check for updates"))
@@ -332,18 +327,16 @@ class MainWindow(QMainWindow):
             self._file_table.setItem(row, 1, size_item)
             self._file_table.setItem(row, 2, dur_item)
             self._file_table.setItem(row, 3, status_item)
-        # Select everything by default (convenient when there's just a
-        # handful of files) - but selection is now the real, explicit
-        # source of truth for what Start processes, not a fallback.
+        # Selects everything by default; selection is the actual source of
+        # truth for what Start processes, not a fallback.
         self._file_table.selectAll()
 
     def _refresh_model_choices(self):
         self._model_combo.clear()
         installed = core.installed_whisper_sizes()
         # Torch-free: never import torch in the main GUI process (see
-        # core.has_diarization_support's docstring for why) - just enough
-        # info to pick heaviest-vs-lightest, the actual device is decided
-        # for real inside the isolated ML pipeline process.
+        # core.has_diarization_support). Only used to pick heaviest-vs-lightest;
+        # the real device is decided inside the isolated ML pipeline process.
         use_gpu = core.nvidia_gpu_present() and get_device_preference() != "cpu"
         device = "cuda" if use_gpu else "cpu"
         recommended = core.recommend_whisper_model(installed, device)
@@ -376,14 +369,11 @@ class MainWindow(QMainWindow):
     def _refresh_diarize_availability(self):
         has_token = bool(core.read_hf_token())
         has_package = core.has_diarization_support()
-        # Independent of has_token now (it used to short-circuit to False
-        # whenever the token was missing, which hid the fact that the
-        # models were ALSO missing) - both gaps need to surface together,
-        # since a fresh install commonly has neither yet.
+        # Independent of has_token so a missing token and missing models both
+        # surface together, since a fresh install commonly has neither yet.
         models_missing = has_package and not core.is_diarization_complete()
-        # Cached for _on_diarize_checkbox_clicked: the checkbox stays
-        # enabled even when unavailable (see there for why), so this is the
-        # only record of whether a click should actually be allowed to stick.
+        # Cached for _on_diarize_checkbox_clicked, which needs to know
+        # whether a click should be allowed to stick.
         self._diarize_available = has_package and has_token and not models_missing
         self._diarize_unavailable_reason = self._diarize_unavailable_message(
             has_package, has_token, models_missing)
@@ -395,22 +385,17 @@ class MainWindow(QMainWindow):
             self._diarize_available and self._diarize_checkbox.isChecked())
 
         if models_missing and models_missing != self._diarize_models_missing_notified:
-            # A distinct, more visible nudge than the passive hover tooltip
-            # above - specifically for "everything else is set up, you just
-            # haven't downloaded the models yet", since that's an easy
-            # one-click fix (unlike the token case, which needs the user to
-            # go get one from HuggingFace first).
+            # More visible nudge than the passive tooltip, since the
+            # models-missing case is an easy one-click fix.
             pos = self._diarize_checkbox.mapToGlobal(self._diarize_checkbox.rect().topLeft())
             QToolTip.showText(pos, self._diarize_unavailable_reason, self._diarize_checkbox)
         self._diarize_models_missing_notified = models_missing
         self._refresh_diarize_button()
 
     def _on_diarize_checkbox_clicked(self, checked):
-        """The checkbox stays enabled even when diarization isn't available
-        yet (a disabled QCheckBox never emits clicked at all, so there'd be
-        no way to explain why) - clicking it while unavailable snaps it back
-        unchecked and pops up the explanation right there, instead of a
-        passive label sitting under it regardless of whether anyone looks."""
+        """Stays enabled even when diarization isn't available yet, since a
+        disabled QCheckBox never emits clicked and couldn't explain why;
+        clicking it while unavailable snaps it back off and shows the reason."""
         if checked and not self._diarize_available:
             self._diarize_checkbox.setChecked(False)
             pos = self._diarize_checkbox.mapToGlobal(self._diarize_checkbox.rect().bottomLeft())
@@ -419,11 +404,9 @@ class MainWindow(QMainWindow):
         self._num_speakers_spin.setEnabled(checked)
 
     def _refresh_diarize_button(self):
-        """The "Identify speakers" button only makes sense once a file has
-        been recognized but not yet had speakers identified - and only
-        while diarization support (pyannote + token + models) is actually
-        there. Shares its unavailability message with the checkbox hint
-        above (_diarize_unavailable_message) so the two never disagree."""
+        """Enabled only once a file is recognized but not yet diarized, and
+        diarization support is actually available. Shares its message with
+        the checkbox (_diarize_unavailable_message) so the two never disagree."""
         has_token = bool(core.read_hf_token())
         has_package = core.has_diarization_support()
         models_missing = has_package and not core.is_diarization_complete()
@@ -497,9 +480,8 @@ class MainWindow(QMainWindow):
             elif box.buttonRole(clicked) == QMessageBox.ActionRole:
                 QDesktopServices.openUrl(QUrl(info["url"]))
         elif info:
-            # A release exists but has no matching MeetingScribe-Setup-*.exe
-            # asset (an older tag, or a manually-edited release) - nothing
-            # to download in-app, fall back to the plain releases-page link.
+            # A release exists but has no matching installer asset - fall
+            # back to the plain releases-page link.
             box = QMessageBox(self)
             box.setWindowTitle(tr("Update available"))
             box.setText(tr("MeetingScribe {version} is available (you have v{current}).",
@@ -522,9 +504,8 @@ class MainWindow(QMainWindow):
         elif dlg.error:
             QMessageBox.warning(self, tr("Download failed"),
                                  tr("Could not download the update: {error}", error=dlg.error))
-        # A plain cancel falls through here silently - the app stays fully
-        # usable either way, and the partial download was already cleaned
-        # up by core.download_installer's own except clause.
+        # Cancel falls through silently - core.download_installer already
+        # cleaned up the partial download.
 
     def _run_update_now(self, installer_path, version):
         if self._worker is not None:
@@ -623,9 +604,8 @@ class MainWindow(QMainWindow):
 
         language = self._lang_combo.currentData()
         language = None if language == "auto" else language
-        # Unchecked: stop after recognition, leaving the file eligible for a
-        # later, separate "Identify speakers" run instead of chaining into
-        # diarization right away.
+        # Unchecked = stop after recognition; file stays eligible for a
+        # later, separate "Identify speakers" run.
         auto_diarize = self._diarize_checkbox.isChecked()
         hf_token = core.read_hf_token() if auto_diarize else None
         num_speakers = self._num_speakers_spin.value() or None
@@ -664,9 +644,8 @@ class MainWindow(QMainWindow):
 
     def _on_progress(self, phase, current, total, label):
         if phase != self._progress_phase:
-            # A new phase (transcribe -> diarize, or a new file) starts its
-            # own ETA clock - elapsed time from the previous phase/file
-            # wouldn't mean anything applied to this one's current/total scale.
+            # A new phase starts its own ETA clock; elapsed time from the
+            # previous phase/file wouldn't apply to this one's scale.
             self._progress_phase = phase
             self._progress_phase_start = time.time()
 

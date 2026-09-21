@@ -13,7 +13,7 @@ from .i18n import tr
 class SpeakerNameDialog(QDialog):
     """Ask what to do with one unidentified speaker: name them (optionally
     overwriting or versioning an existing entry) or skip. Sets .choice to a
-    core.SpeakerNameChoice before closing, whether accepted or skipped."""
+    core.SpeakerNameChoice before closing."""
 
     def __init__(self, label, samples, parent=None):
         super().__init__(parent)

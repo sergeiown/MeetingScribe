@@ -1,7 +1,6 @@
-"""Download progress dialog for the in-app updater. Modeled directly on
-bootstrap.py's BootstrapDialog - same QThread + worker wiring, same
-quit()+wait()-before-close() ordering (see _on_finished below for why that
-ordering specifically is not optional)."""
+"""Download progress dialog for the in-app updater. Modeled on
+bootstrap.py's BootstrapDialog: same QThread + worker wiring and
+quit()+wait()-before-close() ordering (see _on_finished)."""
 
 from pathlib import Path
 
@@ -20,12 +19,10 @@ def _format_size(n: float) -> str:
 
 class UpdateDownloadDialog(QDialog):
     """Downloads one installer exe with a progress bar and a Cancel button.
-    self.installer_path is set to the downloaded file on success; stays
-    None on cancel or failure (self.error holds the message for failures -
-    a plain user cancel leaves both empty, since ModelDownloadWorker
-    reports a cooperative Cancelled the same way as success, via its
-    `finished` signal - the only way to tell them apart is whether the
-    destination file actually exists afterward)."""
+    self.installer_path is set to the downloaded file on success and stays
+    None on cancel or failure (self.error holds the message for failures).
+    Cancel and success both fire the `finished` signal, so they're told
+    apart only by whether the destination file exists afterward."""
 
     def __init__(self, url: str, dest_path: Path, total_size: int, version: str, parent=None):
         super().__init__(parent)
@@ -76,15 +73,9 @@ class UpdateDownloadDialog(QDialog):
             self._status.setText(_format_size(current))
 
     def _on_finished(self):
-        # Same ordering as BootstrapDialog._on_finished, and for the exact
-        # same reason: this slot runs the instant the worker's run() emits
-        # `finished`, a moment before the underlying OS thread has actually
-        # unwound. Without quit()+wait() here, this dialog (and the QThread
-        # parented to it) could be garbage-collected while that thread is
-        # still technically alive once accept()/reject() closes it - Qt
-        # then hard-aborts the whole process ("QThread: Destroyed while
-        # thread is still running"), a real crash reproduced and fixed
-        # today in the first-run bootstrap dialog this class is modeled on.
+        # thread.quit()+wait() must run before accept()/reject() - skipping this
+        # can hard-crash the process ("QThread: Destroyed while thread is still
+        # running") since the OS thread may not have unwound yet when this slot runs.
         self._thread.quit()
         self._thread.wait()
         if self._dest_path.exists():

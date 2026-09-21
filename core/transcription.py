@@ -14,10 +14,7 @@ from .paths import MODELS_DIR
 
 _log = logging.getLogger(__name__)
 
-# A minimal stand-in for faster-whisper's own Segment, used when segments are
-# reloaded from a saved sidecar file (for a later, separate diarization pass)
-# instead of coming fresh out of the model - only start/end/text are ever
-# used downstream (speaker assignment, text rendering).
+# Stand-in for faster-whisper's Segment when reloading from a saved sidecar file; only start/end/text are used downstream.
 Segment = namedtuple("Segment", "start end text")
 
 
@@ -62,8 +59,7 @@ def transcribe_file(file_path: Path, model_size: str, language: Optional[str], t
         on_status("Converting to WAV...")
     wav, tmp_dir = convert_to_wav(file_path)
     try:
-        # Duration can be 0 if ffprobe could not read the original path; recompute
-        # from the ASCII copy so the progress bar and ETA work.
+        # Duration can be 0 if ffprobe couldn't read the original path; recompute from the ASCII copy.
         dur = total_dur if (total_dur and total_dur > 0) else get_duration(wav)
 
         if on_status:

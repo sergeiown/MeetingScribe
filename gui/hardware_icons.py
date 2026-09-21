@@ -1,11 +1,6 @@
-"""Vendor-icon selection for detected hardware, based on the device name
-strings core.detect_hardware_info() returns.
-
-These are original, brand-colored badges (Intel blue / AMD red / NVIDIA
-green) - not the vendors' actual trademarked logos, which this project has
-no verified rights to redistribute. Falls back to a generic chip/card icon
-when the vendor can't be determined from the name string.
-"""
+"""Picks a vendor icon for detected hardware. These are original badges,
+not vendors' trademarked logos, which this project has no rights to
+redistribute; falls back to a generic icon when the vendor is unclear."""
 
 from pathlib import Path
 

@@ -1,24 +1,16 @@
 ; MeetingScribe installer - Inno Setup script.
 ;
-; Deliberately lightweight: ships only source files, a minimal PySide6
-; install (~50-80 MB), and a tiny native launcher exe. The heavy ML
-; dependencies (torch, pyannote.audio, faster-whisper - multiple GB) are NOT
-; bundled here; the app installs them itself on first launch, with its own
-; GUI progress dialog (see gui/bootstrap.py), the same way setup.bat used to
-; for the CLI version.
+; Ships only source files, a minimal PySide6 install, and a tiny native
+; launcher exe. Heavy ML dependencies (torch, pyannote.audio, faster-whisper)
+; are installed by the app itself on first launch (see gui/bootstrap.py).
 ;
-; All Python dependencies - PySide6 here, and everything gui/bootstrap.py
-; installs later - go into a dedicated venv at {app}\venv, never the
-; system/user Python. This is what makes uninstall clean: deleting {app}
-; (see [UninstallDelete] below) removes every package this app ever
-; installed, with zero risk of breaking some other, unrelated Python project
-; on the same machine that happens to share a system-wide install.
+; All Python dependencies go into a dedicated venv at {app}\venv, never the
+; system/user Python, so uninstall (see [UninstallDelete]) can remove
+; everything cleanly without touching any other Python install.
 ;
-; The launcher (launcher/launcher.py, built separately via PyInstaller - see
-; README.md in this folder) is a real, tiny, dependency-free .exe whose only
-; job is to spawn the venv's own pythonw.exe on run_gui.py, with zero console
-; window. It exists so the Start Menu/Desktop shortcut is a genuine .exe with
-; no terminal flash - it does not itself contain the app.
+; The launcher (launcher/launcher.py, built via PyInstaller - see README.md
+; in this folder) only spawns the venv's pythonw.exe on run_gui.py with no
+; console window; it does not itself contain the app.
 ;
 ; Build: see README.md in this folder.
 ; Output: packaging\dist\MeetingScribe-Setup-<version>.exe
@@ -52,12 +44,10 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
-; Both explicit for the in-app updater's /SILENT run (see [Run] below):
-; CloseApplications is defense-in-depth (should be a no-op - the app has
-; already exited itself before the installer ever starts). RestartApplications
-; is the one that actually matters: Inno 6 defaults it to "yes", and left
-; alone it would race the [Run] postinstall relaunch below, risking
-; launching MeetingScribe twice after every update.
+; Both explicit for the in-app updater's /SILENT run (see [Run] below).
+; RestartApplications=no avoids racing the postinstall relaunch there -
+; Inno 6 defaults it to "yes", which would risk launching MeetingScribe
+; twice after every update.
 CloseApplications=yes
 RestartApplications=no
 
@@ -87,23 +77,16 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename
 Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\img\icon.ico"; Tasks: desktopicon
 
 [Run]
-; No skipifsilent: the in-app updater runs this installer with /SILENT and
-; needs the app to relaunch itself afterward (it had to exit before
-; spawning the installer, and can't wait around to relaunch it manually -
-; see core.spawn_installer's docstring). /SILENT is only ever used by that
-; updater today, so this doesn't change behavior for a normal interactive
-; install, which still shows this as an optional, user-visible checkbox.
+; No skipifsilent: the in-app updater runs this with /SILENT and needs the
+; app to relaunch itself afterward (see core.spawn_installer). A normal
+; interactive install still shows this as an optional, user-visible checkbox.
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait
 
 [UninstallDelete]
-; The venv (PySide6, plus everything gui/bootstrap.py installs into it on
-; first launch - torch, pyannote.audio, faster-whisper, ...) isn't tracked
-; by [Files] since it's created at runtime, not copied by the installer -
-; this ensures the uninstaller removes it anyway. This is the
-; "dependencies" half of the uninstall question asked in [Code] below;
-; the "my data" half (models/input/output/speakers/logs, and {app} itself)
-; is handled there instead, since whether to remove it is the user's
-; choice, not a fixed list.
+; The venv isn't tracked by [Files] since it's created at runtime, not
+; copied by the installer - this ensures it's removed anyway. Data files
+; (models/input/output/speakers/logs) are handled separately in [Code],
+; since whether to remove them is the user's choice.
 Type: filesandordirs; Name: "{app}\venv"
 
 [Code]
@@ -113,11 +96,8 @@ var
 function InitializeUninstall(): Boolean;
 begin
   Result := True;
-  // A silent/unattended uninstall (e.g. a scripted reinstall) must not
-  // wipe the user's speakers/transcripts without them ever seeing this
-  // question - default to keeping data in that case, only the venv (see
-  // [UninstallDelete]) goes regardless. An interactive uninstall always
-  // asks, since which choice is "safe" depends on what the person wants.
+  // A silent uninstall must not wipe user data without asking - default to
+  // keeping it (only the venv is removed regardless). Interactive always asks.
   if UninstallSilent() then
     WipeDataOnUninstall := False
   else
@@ -130,12 +110,8 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  // Runs after Inno's own removal (the venv above, plus every [Files]
-  // entry) is already done, so by now {app} - if anything is left at all -
-  // holds only the untracked runtime dirs (models/input/output/speakers/
-  // logs/samples). Wiping it at that point removes exactly the "my data"
-  // half, and {app} itself along with it, without touching anything the
-  // standard uninstall step is still in the middle of handling.
+  // Runs after Inno's own removal is done, so {app} here holds only the
+  // untracked data dirs - wiping it removes exactly the "my data" half.
   if (CurUninstallStep = usPostUninstall) and WipeDataOnUninstall then
     DelTree(ExpandConstant('{app}'), True, True, True);
 end;
@@ -183,9 +159,8 @@ procedure SetupVenvAndPySide6();
 var
   ResultCode: Integer;
 begin
-  // A dedicated venv, never the system/user Python - see the header comment
-  // for why. No console window, ever - WizardForm.StatusLabel is the only
-  // feedback shown while this runs.
+  // Dedicated venv, never system/user Python (see header). No console
+  // window - StatusLabel is the only feedback shown while this runs.
   if not FileExists(VenvPythonPath()) then
     Exec('cmd.exe', '/c python -m venv "' + ExpandConstant('{app}\venv') + '"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);

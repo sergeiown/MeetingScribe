@@ -1,6 +1,5 @@
-"""Writing the final transcript to output/, and a sidecar recording the raw
-transcript segments plus whether they've been diarized yet - so a later,
-separate "identify speakers" pass can run without re-transcribing."""
+"""Writes the final transcript to output/, plus a sidecar of raw segments and
+diarization status so a later "identify speakers" pass can skip re-transcribing."""
 
 import json
 from pathlib import Path

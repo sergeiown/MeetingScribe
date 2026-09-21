@@ -33,11 +33,8 @@ class ModelsTab(QWidget):
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
 
-        # This tab has by far the most content of the three (7 model rows +
-        # the token UI) - scrolling it internally, rather than letting it
-        # dictate the whole dialog's height, keeps the dialog one consistent
-        # size no matter which tab is showing (General/Speakers otherwise
-        # sit in a mostly-empty window sized to fit this tab's content).
+        # This tab scrolls internally instead of sizing the dialog to its
+        # content, so the dialog stays a consistent size across tabs.
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
@@ -67,8 +64,7 @@ class ModelsTab(QWidget):
         note.setWordWrap(True)
         diar_layout.addWidget(note)
 
-        # The token lives here, not in General - it's only ever needed for
-        # these gated models, so it makes more sense right next to them.
+        # The token lives here, not in General, since it's only needed for these gated models.
         token_label = QLabel(tr(
             'Hugging Face token: <a href="https://huggingface.co/settings/tokens">get one here</a>'))
         token_label.setOpenExternalLinks(True)
@@ -87,10 +83,8 @@ class ModelsTab(QWidget):
         token_row.addWidget(save_token_btn)
         diar_layout.addLayout(token_row)
 
-        # The four pyannote models are never useful individually -
-        # diarization needs all of them together - so they're offered as
-        # one combined download instead of four separate buttons/progress
-        # bars (which also left too little width for the "% - ETA" text).
+        # The four pyannote models are only useful together, so they're
+        # offered as one combined download instead of four separate ones.
         self._diarization_row = ModelRowWidget(
             core.DIARIZATION_BUNDLE_LABEL, core.DIARIZATION_BUNDLE_SIZE,
             core.DIARIZATION_BUNDLE_DESCRIPTION, core.is_diarization_complete())
@@ -152,12 +146,11 @@ class ModelsTab(QWidget):
         thread.start()
 
     def cleanup_active_downloads(self):
-        """Called when Settings is about to close - a still-running QThread
-        losing its last Python reference (this tab's _active_downloads is
-        the only thing keeping it alive, since it has no Qt parent) would
-        otherwise hard-abort the whole process (Qt: "QThread: Destroyed
-        while thread is still running"), the same real crash found and
-        fixed for the first-run bootstrap dialog."""
+        """Called when Settings is about to close: quits and waits on each
+        still-running download thread first. A running QThread losing its
+        last Python reference (this tab's _active_downloads is the only
+        thing keeping it alive) crashes the process with "QThread:
+        Destroyed while thread is still running"."""
         for thread, worker in list(self._active_downloads):
             worker.cancel()
             thread.quit()
@@ -380,13 +373,10 @@ class GeneralTab(QWidget):
         box_layout.addLayout(gpu_row)
 
         if not gpu_supported:
-            # A real GPU exists, just not one this app's CUDA-only
-            # acceleration can use - nothing to actually choose, so no
-            # combo/explanation, same as the no-GPU-at-all case.
+            # GPU present but not one this app's CUDA-only acceleration can use.
             return box
 
-        # Only shown at all when both a CPU and a supported GPU are present
-        # - with only one usable option, there would be nothing to choose.
+        # Only shown when both a CPU and a supported GPU are present.
         box_layout.addWidget(QLabel(tr("Use for processing:")))
         self._device_combo = QComboBox()
         self._device_combo.addItem(tr("Automatic (use GPU - recommended)"), "auto")

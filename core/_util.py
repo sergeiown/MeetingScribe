@@ -8,11 +8,8 @@ import warnings
 
 @contextlib.contextmanager
 def silence():
-    """Suppress stdout/stderr at OS fd level + Python stream level + warnings.
-
-    Several ML libraries (pyannote.audio, torch) print noisy banners on
-    import or model load that have no user-facing value.
-    """
+    """Suppress stdout/stderr (fd level + Python streams + warnings) - some ML
+    libraries (pyannote.audio, torch) print noisy, user-irrelevant banners."""
     devnull_fd = os.open(os.devnull, os.O_WRONLY)
     saved_out = os.dup(1)
     saved_err = os.dup(2)

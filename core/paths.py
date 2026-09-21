@@ -14,10 +14,7 @@ SUPPORTED_EXTENSIONS = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4a", ".mp3",
 
 
 def ensure_workdirs() -> None:
-    """Create the local working folders if any are missing.
-
-    All of these (except samples/, which is tracked in git) are git-ignored,
-    so a fresh clone has none of them.
-    """
+    """Create the local working folders if missing - all but samples/ are
+    git-ignored, so a fresh clone starts without them."""
     for d in (INPUT_DIR, OUTPUT_DIR, MODELS_DIR, SPEAKERS_DIR, LOGS_DIR):
         d.mkdir(parents=True, exist_ok=True)

@@ -1,13 +1,10 @@
 """GUI-side controllers for background work.
 
-TranscriptionWorker runs the actual ML pipeline in a separate OS process
-(see process_worker.py) and polls a multiprocessing.Queue via a QTimer,
-re-emitting the same messages as Qt signals - MainWindow's signal handlers
-don't need to know or care that the work happens out-of-process.
-
-ModelDownloadWorker stays QThread-based: it only touches huggingface_hub,
-which never pulls in matplotlib/pyannote, so it doesn't hit the PySide6/Qt
-conflict that motivated the process-based design above.
+TranscriptionWorker/DiarizationWorker run the ML pipeline in a separate OS
+process (see process_worker.py), polling a multiprocessing.Queue via a
+QTimer and re-emitting messages as Qt signals - this sidesteps a PySide6/Qt
+conflict with matplotlib/pyannote that a QThread can't avoid.
+ModelDownloadWorker only touches huggingface_hub, so it's QThread-based.
 """
 
 import multiprocessing as mp
@@ -69,8 +66,7 @@ class _QueueProcessWorker(QObject):
         except queue.Empty:
             pass
         if self._process is not None and not self._process.is_alive():
-            # The child exited without ever sending finished/cancelled - most
-            # likely it crashed. Surface that instead of polling forever.
+            # Child exited without sending finished/cancelled - likely crashed; surface it.
             code = self._process.exitcode
             if code not in (0, None) and self._poll_timer.isActive():
                 self._poll_timer.stop()
@@ -122,8 +118,8 @@ class ModelDownloadWorker(QObject):
     failed = Signal(str)
 
     def __init__(self, download_fn):
-        """download_fn(cancel_token, on_progress) performs one model's
-        download; callers pass a closure over core.models_catalog.download_whisper_model /
+        """download_fn(cancel_token, on_progress) performs one model's download;
+        callers pass a closure over core.models_catalog.download_whisper_model /
         download_pyannote_model with its model-specific args bound."""
         super().__init__()
         self._download_fn = download_fn

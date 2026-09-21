@@ -1,12 +1,10 @@
 """Tiny native launcher for MeetingScribe.
 
-Frozen alone via PyInstaller (a few MB) - deliberately does not import any
-of the app's own heavy dependencies (PySide6, torch, ...). Its only job:
-find pythonw.exe and spawn run_gui.py next to it with zero console window,
-then exit immediately. The actual app (core/, gui/, run_gui.py) ships as
-plain source, installed by the same Inno Setup installer alongside this
-launcher - this exe exists purely so the Start Menu/Desktop shortcut is a
-real .exe with no terminal flash, not so the app itself is "compiled".
+Frozen alone via PyInstaller (a few MB); deliberately imports none of the
+app's own heavy dependencies (PySide6, torch, ...). Its only job: find
+pythonw.exe and spawn run_gui.py next to it with zero console window, then
+exit. It exists purely so the Start Menu/Desktop shortcut is a real .exe
+with no terminal flash - the app itself still ships as plain source.
 """
 
 import ctypes
@@ -20,11 +18,8 @@ MB_ICONERROR = 0x10
 
 
 def _find_pythonw(app_dir: Path) -> str:
-    # The installer creates a dedicated venv at {app}\venv and installs
-    # everything there, never into the system/user Python - this is what
-    # lets uninstall cleanly remove every dependency (see meetingscribe.iss).
-    # Its pythonw.exe always takes priority; a system-wide lookup is only a
-    # defensive fallback (e.g. if venv creation ever failed).
+    # The venv's pythonw.exe always takes priority; the system-wide lookup
+    # below is only a defensive fallback if venv creation ever failed.
     venv_pythonw = app_dir / "venv" / "Scripts" / "pythonw.exe"
     if venv_pythonw.exists():
         return str(venv_pythonw)
@@ -37,9 +32,9 @@ def _find_pythonw(app_dir: Path) -> str:
 
 
 def _show_error(message: str) -> None:
-    # No PySide6 available yet at this point (this launcher deliberately
-    # doesn't depend on it) - a raw Win32 message box is the only UI that
-    # needs zero dependencies, so a spawn failure isn't silently swallowed.
+    # No PySide6 available here (this launcher deliberately has no
+    # dependencies) - a raw Win32 message box needs none either, so a spawn
+    # failure isn't silently swallowed.
     ctypes.windll.user32.MessageBoxW(0, message, "MeetingScribe", MB_ICONERROR)
 
 

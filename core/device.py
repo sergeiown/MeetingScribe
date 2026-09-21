@@ -47,15 +47,10 @@ def _add_cuda_dll_dirs():
 
 
 def detect_device(prefer: str = "auto"):
-    """Returns (device_str, compute_type, device_name).
-
-    prefer: "auto" (use the GPU if available - default) or "cpu" (force CPU
-    even if a GPU is present, per the user's own Settings choice). Only ever
-    call this from the process-isolated ML pipeline - it imports torch,
-    which must never load in the same process as PySide6 (see
-    gui/process_worker.py's module docstring). For a torch-free device
-    summary safe to show in the main GUI, use detect_hardware_info().
-    """
+    """Returns (device_str, compute_type, device_name). Only call from the
+    process-isolated ML pipeline - imports torch, which must never load
+    alongside PySide6 (see gui/process_worker.py). Use detect_hardware_info()
+    for a torch-free summary in the main GUI."""
     if prefer != "cpu":
         try:
             import torch
@@ -105,10 +100,8 @@ def nvidia_gpu_name() -> Optional[str]:
 
 
 def _any_gpu_names() -> list:
-    """Every video controller Windows knows about (any vendor) - torch-free.
-    Used as a fallback when there's no NVIDIA card, so a real (AMD/Intel)
-    GPU still gets acknowledged instead of silently disappearing from the
-    hardware summary just because it can't be used for acceleration here."""
+    """Every video controller Windows knows about (any vendor) - torch-free
+    fallback so a non-NVIDIA GPU is still reported, just as unsupported."""
     try:
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
@@ -117,8 +110,7 @@ def _any_gpu_names() -> list:
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-        # Drop the generic placeholder Windows reports for a disabled/
-        # fallback adapter, if a real one is also listed alongside it.
+        # Drop Windows' generic fallback-adapter placeholder if a real GPU is also listed.
         real = [n for n in names if "microsoft basic" not in n.lower()]
         return real or names
     except Exception:
@@ -126,12 +118,10 @@ def _any_gpu_names() -> list:
 
 
 def detect_hardware_info():
-    """(cpu_name, gpu_name_or_None, gpu_supported) - torch-free, safe for
-    the main GUI process. gpu_supported is only True for an NVIDIA card
-    (the only kind this app's CUDA-based acceleration can use) - an AMD or
-    Intel GPU is still reported by name, just marked unsupported rather
-    than silently omitted. Display only: the actual device used for a run
-    is decided inside the isolated ML pipeline process by detect_device()."""
+    """(cpu_name, gpu_name_or_None, gpu_supported) - torch-free, safe for the
+    main GUI process. gpu_supported is True only for NVIDIA (the only kind
+    this app's CUDA acceleration can use). Display only - detect_device()
+    decides the actual device used for a run."""
     cpu_name = _get_cpu_name()
     nvidia_name = nvidia_gpu_name()
     if nvidia_name:

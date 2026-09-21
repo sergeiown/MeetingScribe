@@ -1,10 +1,6 @@
-"""Cross-process request/response bridge for one speaker-naming decision.
-
-Built in the worker (child) process, sent to the GUI (parent) process as a
-message on a multiprocessing.Queue, and fulfilled there once the user answers
-a modal dialog - the answer is placed on a second queue that the child
-process is blocked reading from.
-"""
+"""Cross-process bridge for one speaker-naming decision: sent to the GUI on
+a multiprocessing.Queue, fulfilled by putting the answer on a second queue
+the worker process blocks on."""
 
 
 class SpeakerDecisionRequest:

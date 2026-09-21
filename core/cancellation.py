@@ -9,11 +9,8 @@ class Cancelled(Exception):
 
 
 class CancelToken:
-    """Thread-safe cooperative cancellation flag.
-
-    A GUI's Cancel button can call .cancel() directly from the GUI thread -
-    threading.Event.set() is thread-safe and touches no Qt object.
-    """
+    """Thread-safe cooperative cancellation flag - safe to call .cancel() from
+    a GUI thread since threading.Event.set() touches no Qt object."""
 
     def __init__(self):
         self._event = threading.Event()

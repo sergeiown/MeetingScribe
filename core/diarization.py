@@ -23,8 +23,7 @@ class DiarizeResult:
 
 
 def _build_diarize_hook(cancel_token: CancelToken, on_progress: Optional[ProgressFn]):
-    """pyannote calls this per internal pipeline stage. Every call checks
-    cancellation, even for the many stages that report no progress total."""
+    """Called by pyannote per pipeline stage; always checks cancellation, even when a stage reports no progress total."""
     def hook(step_name, step_artifact, file=None, total=None, completed=None):
         cancel_token.check()
         if on_progress and total and completed is not None and total > 0:

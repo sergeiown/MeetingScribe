@@ -155,9 +155,8 @@ def assign_speaker(seg_start, seg_end, turns) -> str:
 def extract_speaker_embeddings(audio_np, sr, turns, hf_token: str, db: dict, *,
                                 on_status: Optional[StatusFn] = None,
                                 on_match: Optional[Callable[[str, Optional[str], float], None]] = None) -> dict:
-    """For each unique speaker label in turns, extract an embedding and match
-    it against db. Returns {label: matched_name}; unmatched labels are
-    omitted from the result (on_match still reports them with name=None)."""
+    """Matches each unique speaker label's embedding against db. Unmatched
+    labels are omitted from the returned dict but still reported via on_match(name=None)."""
     import torch
     import numpy as np
     unique = list(set(s for _, _, s in turns))
@@ -273,12 +272,9 @@ def resolve_unknown_speakers(segments, turns, spk_names: dict, audio_np, sr, hf_
                               cancel_token: Optional[CancelToken] = None,
                               on_status: Optional[StatusFn] = None,
                               speakers_dir: Path = SPEAKERS_DIR) -> dict:
-    """For each speaker label not already in spk_names, ask `decide` what to
-    do with it (label + sample lines), then enroll accordingly. `decide` is
-    called once per label and returns a plain SpeakerNameChoice - it has no
-    idea whether the caller answered it synchronously (CLI) or via a
-    cross-thread dialog round-trip (GUI). Returns the merged {label: name}.
-    """
+    """Asks `decide` once per unlabeled speaker, then enrolls the results.
+    `decide` may answer synchronously (CLI) or via a cross-thread GUI dialog;
+    it just returns a SpeakerNameChoice either way. Returns merged {label: name}."""
     unique = sorted(set(s for _, _, s in turns))
     unknown = [s for s in unique if s not in spk_names]
     if not unknown:
@@ -395,9 +391,7 @@ def export_speakers(paths: Optional[list] = None, dest_zip: Path = None) -> int:
 
 def import_speakers(zip_path: Path, speakers_dir: Path = SPEAKERS_DIR) -> int:
     """Imports .npy voiceprints from a zip made by export_speakers(). Never
-    overwrites an existing file - a name collision is imported as a new
-    version for that person instead, so an import can never silently
-    destroy an existing enrollment. Returns how many files were imported."""
+    overwrites an existing file - a name collision is saved as a new version instead, so import can't destroy an enrollment."""
     import zipfile
 
     speakers_dir.mkdir(parents=True, exist_ok=True)

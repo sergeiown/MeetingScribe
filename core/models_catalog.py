@@ -19,11 +19,7 @@ _IGNORE_PATTERNS = ["*.msgpack", "*.h5", "flax_model*", "tf_model*"]
 class ModelSpec:
     key: str
     hf_repo: str
-    label: str  # plain name only, no size - shown in the sidebar's narrow
-                # Model combo too, where a size suffix would get clipped/
-                # crowd out the "[recommended]" tag; the size is a separate
-                # field so Settings > Models (which has room) can still show
-                # it without baking it into every "name" everywhere else.
+    label: str  # no size suffix - would clip in the sidebar's narrow combo
     size: str
     description: str
     mandatory: bool
@@ -57,10 +53,8 @@ PYANNOTE_MODELS = [
               "Used to enroll and recognize your saved, known speakers.", True),
 ]
 
-# These four are never useful individually - diarization needs all of
-# them together - so the Settings > Models UI offers them as one combined
-# download rather than four separate ones. ~55 MB is the sum of the
-# individual sizes above.
+# Offered as one combined download - keep DIARIZATION_BUNDLE_SIZE in sync
+# with the sum of the individual sizes above.
 DIARIZATION_BUNDLE_LABEL = "Diarization models"
 DIARIZATION_BUNDLE_SIZE = "~55 MB"
 DIARIZATION_BUNDLE_DESCRIPTION = (
@@ -141,12 +135,9 @@ def whisper_model_bytes(spec: ModelSpec, hf_token: Optional[str] = None) -> int:
 def _run_with_progress(download_fn, local_dir: Path, total: int,
                         cancel_token: Optional[CancelToken],
                         on_progress: Optional[ProgressFn]) -> None:
-    """Run download_fn() on a background thread, polling local_dir's size to
-    report progress. huggingface_hub.snapshot_download() has no cooperative-
-    cancel hook: cancel_token.check() here can only stop OUR OWN polling and
-    raise - the underlying HTTP transfer keeps writing until it finishes or
-    errors on its own thread.
-    """
+    """Runs download_fn() on a background thread, polling local_dir's size
+    for progress. snapshot_download() has no cancel hook - cancel_token
+    only stops our polling; the transfer itself keeps running to completion."""
     err = {}
 
     def worker():
@@ -220,8 +211,7 @@ def download_diarization_models(hf_token: str, *, models_dir: Path = MODELS_DIR,
                                   cancel_token: Optional[CancelToken] = None,
                                   on_progress: Optional[ProgressFn] = None) -> None:
     """Downloads every PYANNOTE_MODELS entry as one combined operation with
-    a single overall progress fraction - they're only useful installed
-    together, so the UI offers them as one download, not four."""
+    a single overall progress fraction."""
     to_fetch = [s for s in PYANNOTE_MODELS if not is_pyannote_installed(s.key, models_dir)]
     if not to_fetch:
         return

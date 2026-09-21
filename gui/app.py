@@ -15,10 +15,8 @@ from .style import apply_theme, get_theme_preference
 
 
 def _seed_demo_input():
-    """Copy the bundled samples/demo.wav into input/ if input/ has no media
-    file yet, so a fresh checkout always has something ready to try - a
-    local file copy, not a network action, so it doesn't fall under the
-    "no silent downloads" policy."""
+    """Copy the bundled samples/demo.wav into input/ if it has no media yet,
+    so a fresh checkout has something ready to try."""
     has_media = any(
         f.is_file() and f.suffix.lower() in core.SUPPORTED_EXTENSIONS
         for f in core.INPUT_DIR.iterdir()
@@ -31,10 +29,8 @@ def _seed_demo_input():
 
 
 def _seed_demo_speaker():
-    """Copy the bundled samples/demo_speaker.npy into speakers/ if speakers/
-    is empty, so the demo recording (two speakers) can show off both halves
-    of speaker identification right away: one voice already known by name,
-    the other deliberately left unrecognized until the user names it."""
+    """Copy the bundled samples/demo_speaker.npy into speakers/ if empty, so
+    the demo recording has one speaker pre-identified and one not."""
     if any(core.SPEAKERS_DIR.glob("*.npy")):
         return
     demo_speaker = core.SAMPLES_DIR / "demo_speaker.npy"
@@ -44,11 +40,8 @@ def _seed_demo_speaker():
 
 
 def _set_windows_app_id():
-    """Without this, Windows attributes the taskbar button to whichever exe
-    is actually running the process (pythonw.exe here, launched by the tiny
-    launcher.exe) and shows ITS icon there instead of ours, regardless of
-    setWindowIcon() below - the taskbar groups/icons by this id, not by the
-    window icon alone. Must run before any window is created."""
+    """Sets the process AppUserModelID so the Windows taskbar uses our icon
+    instead of pythonw.exe's; must run before any window is created."""
     if sys.platform != "win32":
         return
     try:
@@ -67,8 +60,7 @@ def main():
         app.setWindowIcon(QIcon(str(icon_path)))
     apply_theme()
 
-    # Follow the OS theme live, but only while the user hasn't overridden it
-    # in Settings > General (theme preference "auto" is the default).
+    # Follow the OS theme live, unless the user overrode it (Settings > General).
     def _on_system_theme_changed(_scheme):
         if get_theme_preference() == "auto":
             apply_theme()
@@ -79,11 +71,8 @@ def main():
     core.cleanup_update_downloads()
     core.init_logger()
 
-    # The mandatory model is exactly that - mandatory - so it's bundled in
-    # unconditionally, no confirmation dialog, the same way pip deps never
-    # ask either. Run whichever of {pip deps, the model} is actually needed
-    # through ONE combined progress window - never a components window
-    # followed by a separate model-download window.
+    # The mandatory model installs unconditionally like pip deps, no confirmation
+    # dialog; both share one combined progress window rather than separate ones.
     model_to_bundle = None
     if not core.installed_whisper_sizes():
         model_to_bundle = next(s for s in core.WHISPER_MODELS if s.mandatory)

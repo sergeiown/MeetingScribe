@@ -11,12 +11,9 @@ from .i18n import tr
 
 
 class _ElidedLabel(QLabel):
-    """A single-line label that elides its text to fit the current width,
-    instead of QLabel's own word-wrap. A fixed one-line height means every
-    row in a list built from these (e.g. the Models tab) stays exactly the
-    same height regardless of description length, dialog width, or
-    translation - word-wrap would let a longer line grow some rows taller
-    than their neighbors."""
+    """A single-line label that elides its text to fit the current width
+    instead of word-wrapping, so rows in a list (e.g. the Models tab) keep
+    a uniform height regardless of description length or translation."""
 
     def __init__(self, text, parent=None):
         super().__init__(parent)
@@ -43,12 +40,8 @@ class ModelRowWidget(QFrame):
 
     def __init__(self, label, size, description, installed, parent=None):
         super().__init__(parent)
-        # A full card (background + border, see style.py's QFrame#modelRow
-        # rule), not just a bottom line - a line alone still let two rows of
-        # different height (one with a Download button, taller, next to a
-        # plain "Installed" row) look inconsistently spaced, since what
-        # actually varies is the row's own height, not the gap after it. A
-        # boxed card makes each model's extent unambiguous regardless.
+        # Full card style (see style.py's QFrame#modelRow) keeps row extent
+        # visually unambiguous even when neighboring rows differ in height.
         self.setObjectName("modelRow")
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 10, 12, 10)
@@ -97,9 +90,7 @@ class ModelRowWidget(QFrame):
         if not self._progress.isVisible():
             self._download_start_time = time.time()
         self._download_btn.setVisible(False)
-        # Hides the static "Not installed" text while the bar (which shows
-        # its own %/ETA text) is up - both together were competing for the
-        # same cramped space and clipping the ETA off the edge of the card.
+        # Hide the status text while the progress bar (which shows its own %/ETA) is up.
         self._status_label.setVisible(False)
         self._progress.setVisible(True)
         if total > 0:

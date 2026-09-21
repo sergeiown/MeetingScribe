@@ -1,15 +1,9 @@
-"""The actual transcription/diarization pipeline, run in a separate OS process.
+"""The transcription/diarization pipeline, run in a separate OS process.
 
-Why a whole process instead of a thread: pyannote.audio pulls in sympy,
-which pulls in matplotlib.pyplot, which auto-selects a Qt-integrated GUI
-backend whenever it detects PySide6 already loaded in the process. That
-second, independent Qt-event-loop integration crashes Qt6Core.dll right
-after a transcription finishes (Windows Event ID 1000, always the same
-faulting offset). Setting MPLBACKEND=Agg reduces this but did not reliably
-eliminate it. Running the pipeline in a process that never imports PySide6
-at all removes the conflict at its root: the two libraries are simply never
-loaded together anywhere.
-"""
+Not a thread: pyannote.audio drags in matplotlib, which auto-selects a Qt
+backend when it detects PySide6 already loaded, crashing Qt6Core.dll after
+each transcription. MPLBACKEND=Agg doesn't reliably fix it - a process that
+never imports PySide6 avoids the conflict entirely."""
 
 import shutil
 
@@ -17,14 +11,9 @@ from .decision_request import SpeakerDecisionRequest
 
 
 class ProcessCancelToken:
-    """core.CancelToken-compatible wrapper around a multiprocessing.Event.
-
-    threading.Event can't be shared across a process boundary (each process
-    would get its own independent copy); multiprocessing.Event is designed
-    for exactly this. core's functions only ever call .check()/.is_cancelled(),
-    so this is a drop-in replacement - core doesn't need to know which one
-    it's holding.
-    """
+    """core.CancelToken-compatible wrapper around a multiprocessing.Event -
+    threading.Event can't cross a process boundary, so this substitutes it
+    without core needing to know which one it's holding."""
 
     def __init__(self, event):
         self._event = event
@@ -43,20 +32,16 @@ class ProcessCancelToken:
 
 def run_transcription_process(files, model_size, language, auto_diarize, hf_token,
                                num_speakers, device_preference, progress_q, decision_q, cancel_event):
-    """Entry point for the child process (must be a module-level function so
-    multiprocessing can pickle a reference to it on Windows' spawn start
-    method). Only ever imports `core` here - never gui/PySide6.
+    """Entry point for the child process; must stay module-level so
+    multiprocessing can pickle it under Windows' spawn method. Never
+    imports gui/PySide6.
 
-    Always saves the plain transcript + a segments sidecar first. Only
-    continues straight into diarization if auto_diarize is set (the "Split
-    by speaker" checkbox) and a token is available - otherwise it stops
-    after recognition, leaving the file eligible for a later, separate
-    "Identify speakers" run (see run_diarize_process)."""
+    Saves the transcript + segments sidecar first; only continues into
+    diarization if auto_diarize and a token are present, otherwise the file
+    stays eligible for a later run_diarize_process pass."""
     import core
 
-    # logging is per-process; the parent's own init_logger() call doesn't
-    # carry over to this fresh interpreter, so debug/info diagnostics from
-    # the actual pipeline would otherwise never reach logs/session.log.
+    # Spawned process = fresh interpreter; needs its own init_logger() or nothing reaches logs/session.log.
     core.init_logger()
     core.log_ml_versions()
 
@@ -66,12 +51,11 @@ def run_transcription_process(files, model_size, language, auto_diarize, hf_toke
         progress_q.put(("status", msg))
 
     def on_transcribe_progress(cur, total, label):
-        # label here is the live segment text - genuinely worth showing.
+        # label is the live segment text (real transcript content).
         progress_q.put(("progress", "transcribe", cur, total, label))
 
     def on_diarize_progress(cur, total, label):
-        # label here is an internal pyannote stage name ("segmentation",
-        # "embeddings", ...) - a status caption, not transcript content.
+        # label is an internal pyannote stage name, not transcript content.
         progress_q.put(("progress", "diarize", cur, total, label))
 
     def decide(label, samples):

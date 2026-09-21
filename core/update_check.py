@@ -1,8 +1,7 @@
-"""Check GitHub Releases for a newer version, and (if the user opts in via
-the GUI) download and launch the new installer. The check itself stays
-notify-only in spirit - it never downloads or installs anything on its
-own; download_installer/spawn_installer are separate, only ever called
-after the user's own explicit confirmation."""
+"""Check GitHub Releases for a newer version, and (if the user opts in)
+download and launch the new installer. check_for_update never downloads or
+installs anything itself - download_installer/spawn_installer are separate
+and only run after explicit user confirmation."""
 
 import json
 import re
@@ -30,14 +29,11 @@ def _parse_version(v: str):
 
 
 def check_for_update(timeout: float = 5.0):
-    """{"version": "v2.1.0", "url": "...", "installer_url": "..." or None,
-    "installer_name": "..." or None, "installer_size": 0} if a newer
-    release exists, else None. installer_url is None whenever the release
-    has no asset named like MeetingScribe-Setup-*.exe (an older tag, or a
-    manually-edited release) - callers must then fall back to the
-    open-the-releases-page behavior, there is nothing to download. Never
-    raises - any network/parsing failure just means no update is reported,
-    since this is a convenience check, not a critical path."""
+    """{"version", "url", "installer_url", "installer_name", "installer_size"}
+    if a newer release exists, else None. installer_url is None when the
+    release has no MeetingScribe-Setup-*.exe asset - callers must then fall
+    back to opening the releases page. Never raises; a failed check just
+    means no update is reported."""
     try:
         req = urllib.request.Request(
             _API_URL,
@@ -68,12 +64,10 @@ def check_for_update(timeout: float = 5.0):
 
 
 def download_installer(url: str, dest_path: Path, cancel_token, on_progress, timeout: float = 10.0) -> None:
-    """Streams the installer exe to dest_path, checking cancel_token every
-    chunk. Writes to a sibling "<name>.part" file first and only
-    Path.replace()s onto dest_path after a fully successful read, so a
-    half-written file can never be mistaken for a real installer - on
-    Cancelled or any other error, the .part file is removed and the
-    exception re-raised."""
+    """Streams the installer to a sibling "<name>.part" file and only
+    replaces dest_path after a fully successful read, so a half-written
+    file can never be mistaken for a real installer. Removes .part and
+    re-raises on cancellation or any other error."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     part_path = dest_path.with_name(dest_path.name + ".part")
     req = urllib.request.Request(url, headers={"User-Agent": "MeetingScribe"})
@@ -97,10 +91,9 @@ def download_installer(url: str, dest_path: Path, cancel_token, on_progress, tim
 
 
 def cleanup_update_downloads() -> None:
-    """Called once on every launch. Removes only *.exe/*.part (the
-    multi-MB installer payloads) from UPDATE_DOWNLOAD_DIR - *.log files
-    are deliberately kept, so a failed silent update leaves a diagnosable
-    trail for at least one more launch. Best-effort, never raises."""
+    """Called once on every launch. Removes only *.exe/*.part; *.log files
+    are kept deliberately so a failed update leaves a diagnosable trail.
+    Best-effort, never raises."""
     if not UPDATE_DOWNLOAD_DIR.exists():
         return
     for p in UPDATE_DOWNLOAD_DIR.iterdir():
@@ -112,10 +105,8 @@ def cleanup_update_downloads() -> None:
 
 
 def spawn_installer(installer_path: Path, log_path: Path) -> None:
-    """Fire-and-forget: launches the installer fully detached so it
-    outlives this process once it exits (same defensive posture
-    packaging/launcher/launcher.py already uses for its own child).
-    Raises OSError if CreateProcess itself fails - the caller must treat
+    """Fire-and-forget: launches the installer fully detached so it outlives
+    this process. Raises OSError if CreateProcess fails - callers must treat
     that as "update did not start", not proceed to close the app."""
     args = [str(installer_path), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/LOG={log_path}"]
     subprocess.Popen(

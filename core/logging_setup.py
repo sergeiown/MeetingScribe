@@ -1,9 +1,8 @@
 """Session logging, explicitly initialized (not an import-time side effect).
 
-core.* modules log via logging.getLogger(__name__) (e.g. "core.diarization"),
-which is a child of the "core" logger configured here and propagates to its
-file handler - no extra wiring needed per module.
-"""
+core.* modules log via logging.getLogger(__name__), a child of the "core"
+logger configured here - it propagates to this file handler automatically,
+no extra per-module wiring needed."""
 
 import logging
 from datetime import datetime
@@ -17,14 +16,9 @@ _ROOT_LOGGER_NAME = "core"
 def init_logger():
     """Create/reset logs/session.log and return (logger, log_path).
 
-    Safe to call from any process, including the main GUI process - does
-    NOT import torch or pyannote.audio (see log_ml_versions for that): those
-    pull in matplotlib, which auto-registers a Qt backend that conflicts
-    with PySide6 when both are loaded in the same process (this is exactly
-    why the ML pipeline runs in its own OS process - see
-    gui/process_worker.py's module docstring). faster-whisper is safe here,
-    it doesn't pull in matplotlib.
-    """
+    Safe to call from the main GUI process - unlike log_ml_versions, this
+    never imports torch/pyannote.audio, which pull in matplotlib and conflict
+    with PySide6 in the same process (see gui/process_worker.py)."""
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOGS_DIR / "session.log"
     logger = logging.getLogger(_ROOT_LOGGER_NAME)

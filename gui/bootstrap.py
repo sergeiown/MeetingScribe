@@ -2,9 +2,8 @@
 
 The installer (see packaging/meetingscribe.iss) ships only source files plus
 a minimal PySide6 install - it does not bundle torch/pyannote.audio/
-faster-whisper (multiple GB). Those get installed here, once, the first time
-the app actually needs them, with a GUI progress dialog instead of a batch
-console window. Nothing here runs unless a required package is missing.
+faster-whisper (multiple GB). Those are installed here on first launch, with
+a GUI progress dialog instead of a batch console window.
 """
 
 import importlib.util
@@ -30,12 +29,9 @@ from .i18n import tr
 _REQUIRED_MODULES = ("torch", "faster_whisper", "pyannote.audio")
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-# Matches pip's own "Downloading <name>-<version>-...whl (12.6 MB)" line, or
-# "Using cached <name>-...whl (12.6 MB)" when pip already has that wheel in
-# its local cache (confirmed by testing: this happens often enough in
-# practice that missing it would leave the progress bar permanently short of
-# 100%). Deliberately excludes the smaller ".whl.metadata (6.6 kB)"
-# pre-fetch line pip also prints (that one ends in ".metadata", not ".whl").
+# Matches pip's "Downloading ...whl (12.6 MB)" or "Using cached ...whl
+# (12.6 MB)" lines. Excludes the smaller ".whl.metadata (6.6 kB)" pre-fetch
+# line pip also prints (that one ends in ".metadata", not ".whl").
 _DOWNLOAD_SIZE_RE = re.compile(
     r"(?:Downloading|Using cached)\s+\S+\.whl\s+\(([\d.]+)\s*([KMGT]?B)\)", re.IGNORECASE)
 _UNIT_BYTES = {"B": 1, "KB": 1000, "MB": 1000**2, "GB": 1000**3, "TB": 1000**4}
@@ -55,13 +51,11 @@ def _head_content_length(url: str) -> int:
 
 
 def _estimate_download_bytes(pip_install_args: list):
-    """The exact total bytes `pip install <pip_install_args>` would
-    download, computed without downloading anything: `pip install --dry-run
-    --report` resolves the real package set and gives each one's real wheel
-    URL, then a HEAD request per URL reads the real Content-Length. Takes
-    roughly 10-15s. Returns None on any failure (network hiccup, a pip
-    version without --report, ...) - the caller falls back to the
-    indeterminate spinner, exactly as before this existed."""
+    """Computes the exact total download bytes without downloading anything,
+    via `pip install --dry-run --report` (resolves the real package set and
+    each wheel's URL) then a HEAD request per URL. Takes roughly 10-15s.
+    Returns None on any failure; the caller falls back to an indeterminate
+    spinner."""
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
             report_path = Path(tmp_dir) / "report.json"
@@ -89,14 +83,14 @@ def _estimate_download_bytes(pip_install_args: list):
 
 
 def dependencies_installed() -> bool:
-    """A cheap presence check (no actual import) - real imports of torch et
-    al. take real time, and this runs on every launch, not just the first."""
+    """Cheap presence check (no actual import), since this runs on every
+    launch, not just the first."""
     return all(importlib.util.find_spec(mod) is not None for mod in _REQUIRED_MODULES)
 
 
 def _nvidia_gpu_present() -> bool:
-    """Same detection setup.bat itself uses - checked before torch exists,
-    so it can't rely on torch.cuda.is_available()."""
+    """Same detection setup.bat uses; checked before torch exists, so it
+    can't rely on torch.cuda.is_available()."""
     if shutil.which("nvidia-smi"):
         return True
     for p in (
@@ -125,9 +119,8 @@ class _InstallWorker(QObject):
         self._pending_bytes = 0
 
     def _flush_pending(self):
-        """A download whose size we noted is now known to be finished -
-        either the next "Downloading ..." line just started (so the
-        previous one must be done), or pip's whole process just exited."""
+        """Marks the last noted download's size as finished - either the
+        next "Downloading ..." line just started, or pip's process exited."""
         if self._pending_bytes:
             self._bytes_done += self._pending_bytes
             self._pending_bytes = 0
@@ -135,21 +128,12 @@ class _InstallWorker(QObject):
                 self.progress_fraction.emit(min(self._bytes_done / self._total_bytes, 1.0))
 
     def _run_pip(self, args):
-        # No -q: quiet mode suppresses pip's own "Collecting.../Downloading...
-        # (199 MB)" lines almost entirely, which is exactly what made this
-        # dialog look frozen during the torch download - there was simply
-        # nothing for it to display for minutes at a time.
-        #
-        # --progress-bar on: when pip's stdout is piped (not a real
-        # terminal, as here) it normally never redraws a live percentage at
-        # all - confirmed by direct testing with real multi-MB downloads,
-        # the bar only ever flushes once, as a single completed-download
-        # summary line ("Y.Y/Y.Y MB  Z.Z MB/s  H:MM:SS"). That line (and the
-        # size on the initial "Downloading X (Y MB)" line) is still real,
-        # useful information, just not a smoothly animating percentage on
-        # its own - which is why the overall bytes-done/total tracking below
-        # exists: it turns pip's discrete per-file completions into a real,
-        # honestly proportional overall percentage.
+        # No -q: quiet mode would suppress pip's "Collecting.../Downloading..."
+        # lines, leaving the dialog looking frozen during large downloads.
+        # --progress-bar on: piped stdout never renders a live percentage,
+        # only a single completed-download summary line per file - hence the
+        # bytes-done/total tracking below, which turns those discrete
+        # completions into an overall percentage.
         proc = subprocess.Popen(
             [sys.executable, "-m", "pip", "install", "--progress-bar", "on"] + args,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
@@ -174,11 +158,9 @@ class _InstallWorker(QObject):
                 "--index-url", "https://download.pytorch.org/whl/cu126",
             ]
 
-            # One combined total up front (pip deps, the CUDA torch swap
-            # when applicable, and the mandatory model when requested) so
-            # the whole job - whichever pieces are actually needed - is a
-            # single continuous 0-100% arc in one window, never a components
-            # window followed by a separate model-download window.
+            # One combined total up front so the whole job is a single
+            # continuous 0-100% arc in one window, never a components window
+            # followed by a separate model-download window.
             self.line.emit("Estimating total download size...")
             if self._install_deps:
                 base_total = _estimate_download_bytes(base_args)
@@ -268,11 +250,8 @@ class BootstrapDialog(QDialog):
         self._progress.setRange(0, 0)  # indeterminate
         layout.addWidget(self._progress)
 
-        # A small terminal-styled log strip showing the last few pip lines -
-        # fixed height (exactly _LOG_VISIBLE_LINES lines) and each line
-        # elided (never wrapped), so a long line (a URL, a path) can never
-        # grow the dialog or spill past its edges, and no scrollbar is ever
-        # needed since the content always fits exactly.
+        # Fixed-height, elided (never wrapped) log strip so a long line (a
+        # URL, a path) can't grow the dialog or need a scrollbar.
         self._log_view = QPlainTextEdit()
         self._log_view.setReadOnly(True)
         self._log_view.setFont(QFont("Consolas", 9))
@@ -284,12 +263,8 @@ class BootstrapDialog(QDialog):
             "background-color: #1e1e1e; color: #6fdc8c; "
             "padding: 4px 8px; border-radius: 4px; border: 1px solid #3a3a3a;"
         )
-        # A generous fixed height for N lines - measuring precisely via
-        # document().size() before the widget is ever shown/laid out
-        # produced an even smaller (wrong) number and clipped worse, so this
-        # uses a comfortably large fixed per-line allowance instead. A
-        # little extra breathing room at the bottom is harmless; clipping
-        # the last line is not.
+        # Fixed generous per-line height instead of measuring via
+        # document().size(), which undershoots before layout and clips text.
         metrics = self._log_view.fontMetrics()
         self._log_view.setFixedHeight(metrics.lineSpacing() * self._LOG_VISIBLE_LINES + 40)
         layout.addWidget(self._log_view)
@@ -305,9 +280,8 @@ class BootstrapDialog(QDialog):
         self._thread.finished.connect(self._worker.deleteLater)
         self._thread.finished.connect(self._thread.deleteLater)
 
-        # pip can go quiet for a stretch mid-download (a single "Downloading
-        # X (800 MB)" line, then nothing until it's done) - this ticks every
-        # second regardless, so the dialog never *looks* frozen even then.
+        # pip can go quiet for a stretch mid-download - this ticks every
+        # second regardless, so the dialog never *looks* frozen.
         self._heartbeat_timer = QTimer(self)
         self._heartbeat_timer.timeout.connect(self._update_heartbeat)
         self._heartbeat_timer.start(1000)
@@ -347,18 +321,13 @@ class BootstrapDialog(QDialog):
         self.ok = ok
         self.error = error
         self.model_error = model_error
-        # This slot runs on the GUI thread the instant _InstallWorker.run()
-        # emits `finished` - but that's from INSIDE the worker's run(), a
-        # moment before the underlying OS thread actually finishes
-        # unwinding. self._thread.quit() alone (the other, second listener
-        # on this same signal) only *requests* the thread's event loop to
-        # stop and isn't guaranteed to have run yet, let alone completed,
-        # by the time accept() below could destroy this dialog (and the
-        # QThread parented to it) - Qt then hard-aborts the whole process
-        # with "QThread: Destroyed while thread is still running" (seen for
-        # real via Windows Event Viewer: pythonw.exe / ucrtbase.dll /
-        # 0xc0000409, right at this exact transition). wait() blocks only
-        # briefly here since the worker's Python code has already returned.
+        # This slot runs the instant `finished` fires, before the
+        # underlying thread has fully unwound. thread.quit() only requests
+        # the event loop to stop; if accept() destroyed this dialog (and its
+        # QThread) first, Qt hard-aborts the process with "QThread:
+        # Destroyed while thread is still running". quit()+wait() must
+        # happen before accept(). wait() blocks only briefly here since the
+        # worker's Python code has already returned.
         self._thread.quit()
         self._thread.wait()
         self.accept()
@@ -368,9 +337,7 @@ def ensure_dependencies(requirements_path: Path, model_spec=None, hf_token: str 
     """(ok, model_error). ok is True once the heavy ML dependencies are
     installed and usable. model_error is a non-fatal message if model_spec
     was given and its download failed (empty otherwise). Shows one combined
-    dialog covering whichever of (pip deps, model_spec) is actually needed -
-    never a "components" window followed by a separate model-download
-    window for the same first-run setup."""
+    dialog covering whichever of (pip deps, model_spec) is actually needed."""
     install_deps = not dependencies_installed()
     if not install_deps and model_spec is None:
         return True, ""

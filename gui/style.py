@@ -39,9 +39,8 @@ def resolve_dark_mode() -> bool:
 
 
 def apply_theme() -> None:
-    """Re-applies the stylesheet app-wide for the current preference/system
-    theme. Safe to call any time, e.g. right after the user changes the
-    Settings > General theme choice, or when the OS theme changes live."""
+    """Re-applies the stylesheet for the current theme; safe to call any
+    time, e.g. after a Settings change or a live OS theme switch."""
     app = QApplication.instance()
     if app is not None:
         app.setStyleSheet(build_stylesheet(dark=resolve_dark_mode()))
