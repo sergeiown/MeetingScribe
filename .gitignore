@@ -1,21 +1,14 @@
-# Local config with secrets (never commit a real HF_TOKEN)
 config.env
 
-# Local-only data and runtime folders
 models/
 speakers/
 input/
 output/
 logs/
 
-# Python
 __pycache__/
 *.pyc
 
-# Installer build output
 packaging/dist/
 packaging/*.log
-
-# Local-only build notes - not meant for the public repo (see README badges/
-# language-switcher rule: only README.md/README.uk.md belong in GitHub's view)
 packaging/BUILDING.md
