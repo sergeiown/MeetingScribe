@@ -206,6 +206,7 @@ _UK = {
     "Saved": "Збережено",
     "HF_TOKEN saved to config.env.": "HF_TOKEN збережено у config.env.",
     "Interface language:": "Мова інтерфейсу:",
+    "Interface": "Інтерфейс",
     "Hardware": "Обладнання",
     "CPU: {name}": "CPU: {name}",
     "GPU: {name}": "GPU: {name}",

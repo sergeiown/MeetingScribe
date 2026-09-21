@@ -339,10 +339,19 @@ class GeneralTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        # Generous gap between blocks (theme / language / hardware); each
-        # block keeps its own label snug against its control (see below).
+        # Generous gap between the two group boxes; each keeps its own
+        # internal spacing tighter (label snug against its control).
         layout.setSpacing(22)
         layout.setContentsMargins(12, 16, 12, 16)
+
+        layout.addWidget(self._build_interface_box())
+        layout.addWidget(self._build_hardware_box())
+        layout.addStretch()
+
+    def _build_interface_box(self):
+        box = QGroupBox(tr("Interface"))
+        box_layout = QVBoxLayout(box)
+        box_layout.setSpacing(18)
 
         theme_block = QVBoxLayout()
         theme_block.setSpacing(8)
@@ -356,7 +365,7 @@ class GeneralTab(QWidget):
             self._theme_combo.setCurrentIndex(idx)
         self._theme_combo.currentIndexChanged.connect(self._on_theme_changed)
         theme_block.addWidget(self._theme_combo)
-        layout.addLayout(theme_block)
+        box_layout.addLayout(theme_block)
 
         lang_block = QVBoxLayout()
         lang_block.setSpacing(8)
@@ -369,10 +378,9 @@ class GeneralTab(QWidget):
             self._ui_lang_combo.setCurrentIndex(idx)
         self._ui_lang_combo.currentIndexChanged.connect(self._on_ui_language_changed)
         lang_block.addWidget(self._ui_lang_combo)
-        layout.addLayout(lang_block)
+        box_layout.addLayout(lang_block)
 
-        layout.addWidget(self._build_hardware_box())
-        layout.addStretch()
+        return box
 
     def _build_hardware_box(self):
         box = QGroupBox(tr("Hardware"))
