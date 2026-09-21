@@ -91,6 +91,11 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: po
 ; (models/input/output/speakers/logs) are handled separately in [Code],
 ; since whether to remove them is the user's choice.
 Type: filesandordirs; Name: "{app}\venv"
+; Python's own bytecode cache, written at runtime under the source dirs
+; Setup installed - not tracked by [Files], so it survives a "keep data"
+; uninstall otherwise, along with the now near-empty core\/gui\ folders.
+Type: filesandordirs; Name: "{app}\core\__pycache__"
+Type: filesandordirs; Name: "{app}\gui\__pycache__"
 
 [Code]
 var
