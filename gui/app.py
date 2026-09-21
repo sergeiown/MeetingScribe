@@ -6,7 +6,7 @@ import time
 
 import core
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 
@@ -22,8 +22,14 @@ _single_instance_mutex_handle = None
 
 
 def _seed_demo_input():
-    """Copy the bundled samples/demo.wav into input/ if it has no media yet,
-    so a fresh checkout has something ready to try."""
+    """Copy the bundled samples/demo.wav into input/ once, on the very first
+    launch, so there's something ready to try - gated on a persistent flag
+    rather than "input/ is currently empty", so deleting the demo later
+    doesn't bring it back on the next launch."""
+    settings = QSettings("MeetingScribe", "MeetingScribe")
+    if settings.value("demo_input_seeded", False, type=bool):
+        return
+    settings.setValue("demo_input_seeded", True)
     has_media = any(
         f.is_file() and f.suffix.lower() in core.SUPPORTED_EXTENSIONS
         for f in core.INPUT_DIR.iterdir()
@@ -36,8 +42,12 @@ def _seed_demo_input():
 
 
 def _seed_demo_speaker():
-    """Copy the bundled samples/demo_speaker.npy into speakers/ if empty, so
-    the demo recording has one speaker pre-identified and one not."""
+    """Copy the bundled samples/demo_speaker.npy into speakers/ once, on the
+    very first launch - same persistent-flag reasoning as _seed_demo_input."""
+    settings = QSettings("MeetingScribe", "MeetingScribe")
+    if settings.value("demo_speaker_seeded", False, type=bool):
+        return
+    settings.setValue("demo_speaker_seeded", True)
     if any(core.SPEAKERS_DIR.glob("*.npy")):
         return
     demo_speaker = core.SAMPLES_DIR / "demo_speaker.npy"
