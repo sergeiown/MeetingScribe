@@ -508,7 +508,13 @@ class MainWindow(QMainWindow):
         worker.failed.connect(thread.quit)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        self._update_check_thread = thread  # kept alive on self until it finishes
+        # Both kept alive on self until the thread finishes - worker had no
+        # persistent reference here before (only the thread did), so it was
+        # liable to be garbage-collected before its run() slot ever fired,
+        # silently dropping the check. This is likely why some real-world
+        # update checks (automatic or manual) appeared to just do nothing.
+        self._update_check_thread = thread
+        self._update_check_worker = worker
         thread.start()
 
     def _on_update_check_failed(self, error, manual):
