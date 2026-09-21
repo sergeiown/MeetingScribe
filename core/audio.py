@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 
 _log = logging.getLogger(__name__)
+_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 class MediaError(Exception):
@@ -38,7 +39,7 @@ def get_duration(path):
         result = subprocess.run(
             [FFPROBE, "-v", "quiet", "-show_entries", "format=duration",
              "-of", "csv=p=0", str(path)],
-            capture_output=True, text=True
+            capture_output=True, text=True, creationflags=_CREATE_NO_WINDOW
         )
         return float(result.stdout.strip())
     except Exception:
@@ -71,7 +72,7 @@ def convert_to_wav(file_path):
         wav = os.path.join(tmp_dir, "audio.wav")
         result = subprocess.run(
             [FFMPEG or "ffmpeg", "-y", "-i", src, "-ar", "16000", "-ac", "1", "-f", "wav", wav],
-            capture_output=True
+            capture_output=True, creationflags=_CREATE_NO_WINDOW
         )
         if result.returncode != 0 or not os.path.exists(wav):
             tail = (result.stderr or b"").decode("utf-8", "replace").strip().splitlines()

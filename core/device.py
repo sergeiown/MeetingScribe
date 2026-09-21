@@ -92,7 +92,8 @@ def nvidia_gpu_name() -> Optional[str]:
     try:
         result = subprocess.run(
             [exe, "--query-gpu=name", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=5)
+            capture_output=True, text=True, timeout=5,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         lines = result.stdout.strip().splitlines()
         return lines[0].strip() if lines and lines[0].strip() else None
     except Exception:
