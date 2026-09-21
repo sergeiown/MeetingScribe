@@ -498,6 +498,21 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, tr("How to use MeetingScribe"), tr(_HOW_TO_USE_TEXT))
 
     def _check_for_updates(self, manual=False):
+        # Guards against the automatic startup check and a manual click
+        # overlapping: each would otherwise reuse the same
+        # self._update_check_thread/_worker slots, so the second call's
+        # assignment could silently drop the first check's worker mid-flight
+        # (see the note below) - and if both DO find an update, two "Update
+        # available" QMessageBoxes could each try to go modal at once.
+        if getattr(self, "_checking_updates", False):
+            # Silent for the automatic path (nothing for the user to react
+            # to); a manual click deserves an acknowledgement instead of
+            # just doing nothing with no explanation.
+            if manual:
+                QMessageBox.information(
+                    self, tr("Check for updates"), tr("Already checking - hang on a moment."))
+            return
+        self._checking_updates = True
         thread = QThread(self)
         worker = UpdateCheckWorker()
         worker.moveToThread(thread)
@@ -518,6 +533,7 @@ class MainWindow(QMainWindow):
         thread.start()
 
     def _on_update_check_failed(self, error, manual):
+        self._checking_updates = False
         # The silent startup check stays silent on failure (e.g. offline) -
         # only a manually-requested check reports it, so it's never
         # mistaken for "you're up to date" when the check didn't complete.
@@ -527,6 +543,7 @@ class MainWindow(QMainWindow):
                 tr("Could not check for updates: {error}", error=error))
 
     def _on_update_checked(self, info, manual):
+        self._checking_updates = False
         if info and info.get("installer_url"):
             box = QMessageBox(self)
             box.setWindowTitle(tr("Update available"))

@@ -87,6 +87,7 @@ _UK = {
         "керуються з <b>Settings</b>.",
     "Check for updates": "Перевірити оновлення",
     "Could not check for updates: {error}": "Не вдалося перевірити оновлення: {error}",
+    "Already checking - hang on a moment.": "Перевірка вже триває - зачекай трохи.",
     "Update available": "Доступне оновлення",
     "MeetingScribe {version} is available (you have v{current}).":
         "Доступна MeetingScribe {version} (у вас v{current}).",
