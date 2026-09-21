@@ -72,6 +72,15 @@ class ModelRowWidget(QFrame):
         top_row.addWidget(self._action_btn)
         outer.addLayout(top_row)
 
+        # Fixed to the widest of the three possible labels, so Download/Stop/
+        # Delete line up on both edges across rows instead of each hugging
+        # its own text width.
+        widths = []
+        for text in (tr("Download"), tr("Stop"), tr("Delete")):
+            self._action_btn.setText(text)
+            widths.append(self._action_btn.sizeHint().width())
+        self._action_btn.setFixedWidth(max(widths))
+
         if description:
             desc_label = _ElidedLabel(description)
             desc_label.setProperty("hint", True)

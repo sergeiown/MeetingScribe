@@ -5,11 +5,11 @@ from pathlib import Path
 import core
 
 from PySide6.QtCore import Qt, QThread
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QHeaderView, QTableWidget, QTableWidgetItem, QLineEdit, QPushButton, QComboBox,
-    QLabel, QMessageBox, QInputDialog, QToolButton, QFileDialog, QScrollArea, QFrame,
+    QLabel, QMessageBox, QInputDialog, QFileDialog, QScrollArea, QFrame,
 )
 
 from .device_prefs import get_device_preference, set_device_preference
@@ -83,12 +83,15 @@ class ModelsTab(QWidget):
         token_row = QHBoxLayout()
         self._token_edit = QLineEdit(core.read_hf_token())
         self._token_edit.setEchoMode(QLineEdit.Password)
+        # An icon embedded in the field itself (the usual place for a
+        # password show/hide toggle) instead of a separate button next to it.
+        assets_dir = Path(__file__).parent / "assets"
+        self._show_action = self._token_edit.addAction(
+            QIcon(str(assets_dir / "eye.svg")), QLineEdit.TrailingPosition)
+        self._show_action.setToolTip(tr("Show"))
+        self._show_action.triggered.connect(self._toggle_token_visibility)
+        self._token_visible = False
         token_row.addWidget(self._token_edit, stretch=1)
-        self._show_btn = QToolButton()
-        self._show_btn.setText(tr("Show"))
-        self._show_btn.setCheckable(True)
-        self._show_btn.toggled.connect(self._toggle_token_visibility)
-        token_row.addWidget(self._show_btn)
         save_token_btn = QPushButton(tr("Save token"))
         save_token_btn.clicked.connect(self._save_token)
         token_row.addWidget(save_token_btn)
@@ -112,9 +115,13 @@ class ModelsTab(QWidget):
         has_token = bool(core.read_hf_token())
         self._diarization_row.set_needs_token(not has_token)
 
-    def _toggle_token_visibility(self, checked):
-        self._token_edit.setEchoMode(QLineEdit.Normal if checked else QLineEdit.Password)
-        self._show_btn.setText(tr("Hide") if checked else tr("Show"))
+    def _toggle_token_visibility(self):
+        self._token_visible = not self._token_visible
+        self._token_edit.setEchoMode(QLineEdit.Normal if self._token_visible else QLineEdit.Password)
+        assets_dir = Path(__file__).parent / "assets"
+        icon_name = "eye_off.svg" if self._token_visible else "eye.svg"
+        self._show_action.setIcon(QIcon(str(assets_dir / icon_name)))
+        self._show_action.setToolTip(tr("Hide") if self._token_visible else tr("Show"))
 
     def _save_token(self):
         self._write_token()
