@@ -215,7 +215,7 @@ _UK = {
         "Не вдалося завантажити модель: {error}\n\nМожна повторити пізніше через Налаштування > Моделі.",
 
     # bootstrap.py
-    "MeetingScribe - Setting up": "MeetingScribe - Налаштування",
+    "MeetingScribe - Setting up": "MeetingScribe - Встановлення компонентів",
     "Starting...": "Починаємо...",
     "{time} elapsed": "минуло {time}",
     "MeetingScribe needs about 2-3 GB of speech-recognition "
