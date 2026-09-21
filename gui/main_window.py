@@ -7,7 +7,7 @@ from pathlib import Path
 import core
 
 from PySide6.QtCore import Qt, QSettings, QThread, QUrl
-from PySide6.QtGui import QAction, QDesktopServices, QTextCursor
+from PySide6.QtGui import QAction, QDesktopServices, QTextCursor, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem,
@@ -35,6 +35,20 @@ _ABOUT_TEXT = (
     "no audio ever leaves the host.<br><br>"
     "MIT License © Serhii Myshko<br>"
     '<a href="https://github.com/sergeiown/MeetingScribe">github.com/sergeiown/MeetingScribe</a>'
+)
+
+_HOW_TO_USE_TEXT = (
+    "<ol>"
+    "<li>Add audio/video files with <b>Add files...</b> (or drop them into the <code>input</code> folder).</li>"
+    "<li>Select one or more files, pick a recognition model and language.</li>"
+    "<li>Click <b>Recognize speech</b>. With automatic speaker identification off, it stops after "
+    "a plain transcript - click <b>Identify speakers</b> whenever you're ready to add speaker labels.</li>"
+    "<li>For unrecognized speakers, keep the suggested name or type your own, and optionally save "
+    "their voiceprint for next time.</li>"
+    "<li>Find the transcript in the <code>output</code> folder (one .txt per input file).</li>"
+    "</ol>"
+    "Installed models, saved speakers, your Hugging Face token, theme, and interface language "
+    "are all managed from <b>Settings</b>."
 )
 
 
@@ -75,6 +89,9 @@ class MainWindow(QMainWindow):
         menu_bar.addAction(self._settings_action)
 
         self._help_menu = menu_bar.addMenu(tr("Help"))
+        self._how_to_use_action = QAction(tr("How to use"), self)
+        self._how_to_use_action.triggered.connect(self._show_how_to_use)
+        self._help_menu.addAction(self._how_to_use_action)
         self._check_updates_action = QAction(tr("Check for updates"), self)
         self._check_updates_action.triggered.connect(lambda: self._check_for_updates(manual=True))
         self._help_menu.addAction(self._check_updates_action)
@@ -257,6 +274,7 @@ class MainWindow(QMainWindow):
         written into the transcript view is left as-is."""
         self._settings_action.setText(tr("Settings"))
         self._help_menu.setTitle(tr("Help"))
+        self._how_to_use_action.setText(tr("How to use"))
         self._check_updates_action.setText(tr("Check for updates"))
         self._about_action.setText(tr("About"))
         self._exit_action.setText(tr("Exit"))
@@ -312,17 +330,23 @@ class MainWindow(QMainWindow):
             dur = core.get_duration(f)
             dur_str = core.format_duration(dur) if dur else tr("unknown")
             size_mb = f.stat().st_size / 1024 / 1024
-            transcribed, _diarizable = core.file_status(f)
+            transcribed, diarizable = core.file_status(f)
+            if not transcribed:
+                status_text, status_color = "", None
+            elif diarizable:
+                status_text, status_color = tr("✓ Transcribed"), QColor("#b8860b")
+            else:
+                status_text, status_color = tr("✓✓ Diarized"), Qt.darkGreen
 
             name_item = QTableWidgetItem(f.name)
             name_item.setData(Qt.UserRole, f)
             size_item = QTableWidgetItem(f"{size_mb:.1f} MB")
             dur_item = QTableWidgetItem(dur_str)
-            status_item = QTableWidgetItem(tr("✓ Transcribed") if transcribed else "")
+            status_item = QTableWidgetItem(status_text)
 
-            if transcribed:
+            if status_color is not None:
                 for it in (name_item, size_item, dur_item, status_item):
-                    it.setForeground(Qt.darkGreen)
+                    it.setForeground(status_color)
 
             self._file_table.setItem(row, 0, name_item)
             self._file_table.setItem(row, 1, size_item)
@@ -457,6 +481,9 @@ class MainWindow(QMainWindow):
 
     def _show_about(self):
         QMessageBox.about(self, tr("About MeetingScribe"), tr(_ABOUT_TEXT, version=core.VERSION))
+
+    def _show_how_to_use(self):
+        QMessageBox.information(self, tr("How to use MeetingScribe"), tr(_HOW_TO_USE_TEXT))
 
     def _check_for_updates(self, manual=False):
         thread = QThread(self)

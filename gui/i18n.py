@@ -60,6 +60,31 @@ _UK = {
         "комп'ютері - аудіо ніколи не залишає його.<br><br>"
         "Ліцензія MIT © Сергій Мишко<br>"
         '<a href="https://github.com/sergeiown/MeetingScribe">github.com/sergeiown/MeetingScribe</a>',
+    "How to use": "Як користуватися",
+    "How to use MeetingScribe": "Як користуватися MeetingScribe",
+    "<ol>"
+    "<li>Add audio/video files with <b>Add files...</b> (or drop them into the <code>input</code> folder).</li>"
+    "<li>Select one or more files, pick a recognition model and language.</li>"
+    "<li>Click <b>Recognize speech</b>. With automatic speaker identification off, it stops after "
+    "a plain transcript - click <b>Identify speakers</b> whenever you're ready to add speaker labels.</li>"
+    "<li>For unrecognized speakers, keep the suggested name or type your own, and optionally save "
+    "their voiceprint for next time.</li>"
+    "<li>Find the transcript in the <code>output</code> folder (one .txt per input file).</li>"
+    "</ol>"
+    "Installed models, saved speakers, your Hugging Face token, theme, and interface language "
+    "are all managed from <b>Settings</b>.":
+        "<ol>"
+        "<li>Додай аудіо/відео файли кнопкою <b>Додати файли...</b> (або поклади їх у папку <code>input</code>).</li>"
+        "<li>Вибери один або кілька файлів, обери модель розпізнавання й мову.</li>"
+        "<li>Натисни <b>Розпізнати мовлення</b>. Якщо автоматичне визначення спікерів вимкнено, процес "
+        "зупиниться після звичайного транскрипту - натисни <b>Визначити спікерів</b>, коли будеш готовий "
+        "додати мітки спікерів.</li>"
+        "<li>Для нерозпізнаних спікерів залиш запропоноване ім'я або введи своє, і за бажанням збережи "
+        "голосовий відбиток на майбутнє.</li>"
+        "<li>Транскрипт з'явиться в папці <code>output</code> (один .txt на кожен вхідний файл).</li>"
+        "</ol>"
+        "Встановлені моделі, збережені спікери, токен Hugging Face, тема та мова інтерфейсу "
+        "керуються з <b>Settings</b>.",
     "Check for updates": "Перевірити оновлення",
     "Update available": "Доступне оновлення",
     "MeetingScribe {version} is available (you have v{current}).":
@@ -105,6 +130,7 @@ _UK = {
     "  [recommended]": "  [рекомендовано]",
     "unknown": "невідомо",
     "✓ Transcribed": "✓ Розшифровано",
+    "✓✓ Diarized": "✓✓ Розділено за спікерами",
     "Speaker diarization isn't available in this install.":
         "Розділення за спікерами недоступне в цьому встановленні.",
     "Enter a Hugging Face token and download the diarization "
