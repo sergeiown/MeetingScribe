@@ -131,6 +131,7 @@ _UK = {
     "unknown": "невідомо",
     "✓ Transcribed": "✓ Розшифровано",
     "✓✓ Diarized": "✓✓ Розділено за спікерами",
+    "○ Not recognized": "○ Не розпізнано",
     "Speaker diarization isn't available in this install.":
         "Розділення за спікерами недоступне в цьому встановленні.",
     "Enter a Hugging Face token and download the diarization "

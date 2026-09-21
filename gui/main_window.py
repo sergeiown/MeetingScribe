@@ -332,7 +332,7 @@ class MainWindow(QMainWindow):
             size_mb = f.stat().st_size / 1024 / 1024
             transcribed, diarizable = core.file_status(f)
             if not transcribed:
-                status_text, status_color = "", None
+                status_text, status_color = tr("○ Not recognized"), None
             elif diarizable:
                 status_text, status_color = tr("✓ Transcribed"), QColor("#b8860b")
             else:
