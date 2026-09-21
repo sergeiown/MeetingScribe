@@ -221,6 +221,11 @@ class BootstrapDialog(QDialog):
         self.setWindowTitle(tr("MeetingScribe - Setting up"))
         self.setModal(True)
         self.setMinimumWidth(480)
+        # No Cancel button - these components are mandatory, the app can't
+        # run without them. The title bar's X is still there by default
+        # though, and closing it while _worker's QThread is still running
+        # hard-crashes the process the same way skipping quit()+wait() does
+        # elsewhere (see _on_finished) - closeEvent() below blocks that.
         self.ok = False
         self.error = ""
         self.model_error = ""
@@ -289,6 +294,16 @@ class BootstrapDialog(QDialog):
 
     def start(self):
         self._thread.start()
+
+    def closeEvent(self, event):
+        # Ignoring the close while the worker is still on its QThread avoids
+        # the same crash quit()+wait() guards against in _on_finished - this
+        # is reached instead when the user clicks the title bar's X, which
+        # accept()/reject() are never wired to.
+        if self._thread.isRunning():
+            event.ignore()
+        else:
+            super().closeEvent(event)
 
     def _on_line(self, line):
         line = line.strip()
