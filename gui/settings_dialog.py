@@ -9,13 +9,16 @@ from PySide6.QtGui import QPixmap, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QHeaderView, QTableWidget, QTableWidgetItem, QLineEdit, QPushButton, QComboBox,
-    QLabel, QMessageBox, QInputDialog, QFileDialog, QScrollArea, QFrame,
+    QLabel, QMessageBox, QInputDialog, QFileDialog, QScrollArea, QFrame, QCheckBox,
 )
 
 from .device_prefs import get_device_preference, set_device_preference
 from .hardware_icons import cpu_icon_path, gpu_icon_path
 from .i18n import tr, available_languages, get_language, set_language
-from .style import apply_theme, get_theme_preference, set_theme_preference
+from .style import (
+    apply_theme, get_theme_preference, set_theme_preference,
+    get_show_splash_preference, set_show_splash_preference,
+)
 from .widgets import ModelRowWidget, fit_action_button_width
 from .workers import ModelDownloadProcessWorker
 
@@ -379,6 +382,11 @@ class GeneralTab(QWidget):
         self._ui_lang_combo.currentIndexChanged.connect(self._on_ui_language_changed)
         lang_block.addWidget(self._ui_lang_combo)
         box_layout.addLayout(lang_block)
+
+        self._splash_checkbox = QCheckBox(tr("Show a splash screen on startup"))
+        self._splash_checkbox.setChecked(get_show_splash_preference())
+        self._splash_checkbox.toggled.connect(set_show_splash_preference)
+        box_layout.addWidget(self._splash_checkbox)
 
         return box
 

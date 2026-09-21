@@ -208,6 +208,7 @@ _UK = {
     "HF_TOKEN saved to config.env.": "HF_TOKEN збережено у config.env.",
     "Interface language:": "Мова інтерфейсу:",
     "Interface": "Інтерфейс",
+    "Show a splash screen on startup": "Показувати заставку при запуску",
     "Hardware": "Обладнання",
     "CPU: {name}": "CPU: {name}",
     "GPU: {name}": "GPU: {name}",

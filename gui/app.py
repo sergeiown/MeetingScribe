@@ -5,13 +5,16 @@ import sys
 
 import core
 
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
 
-from .bootstrap import ensure_dependencies
+from .bootstrap import dependencies_installed, ensure_dependencies
 from .i18n import tr
 from .main_window import MainWindow
-from .style import apply_theme, get_theme_preference
+from .style import apply_theme, get_theme_preference, get_show_splash_preference
+
+_SPLASH_WIDTH = 640
 
 
 def _seed_demo_input():
@@ -76,6 +79,20 @@ def main():
     model_to_bundle = None
     if not core.installed_whisper_sizes():
         model_to_bundle = next(s for s in core.WHISPER_MODELS if s.mandatory)
+    needs_bootstrap = model_to_bundle is not None or not dependencies_installed()
+
+    # Fills the otherwise-blank stretch before MainWindow is ready to show.
+    # Skipped ahead of a first-run bootstrap: that flow has its own, much
+    # longer-running progress dialog, and the two would just overlap.
+    splash = None
+    if get_show_splash_preference() and not needs_bootstrap:
+        splash_path = core.SCRIPT_DIR / "img" / "meetingscribe_cover.png"
+        if splash_path.exists():
+            pixmap = QPixmap(str(splash_path))
+            pixmap = pixmap.scaledToWidth(_SPLASH_WIDTH, Qt.SmoothTransformation)
+            splash = QSplashScreen(pixmap)
+            splash.show()
+            app.processEvents()
 
     ok, model_error = ensure_dependencies(
         core.SCRIPT_DIR / "requirements.txt",
@@ -92,5 +109,7 @@ def main():
     _seed_demo_speaker()
 
     window = MainWindow()
+    if splash is not None:
+        splash.finish(window)
     window.show()
     sys.exit(app.exec())
