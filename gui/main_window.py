@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from .device_prefs import get_device_preference
 from .i18n import tr, get_language
 from .settings_dialog import SettingsDialog
+from .style import get_prevent_sleep_preference
 from .dialogs import SpeakerNameDialog
 from .update_dialog import UpdateDownloadDialog
 from .workers import TranscriptionWorker, DiarizationWorker, UpdateCheckWorker
@@ -647,7 +648,8 @@ class MainWindow(QMainWindow):
         self._refresh_file_list()
 
     def _begin_run(self, file_count):
-        core.set_sleep_prevention(True)
+        if get_prevent_sleep_preference():
+            core.set_sleep_prevention(True)
         self._transcript_view.clear()
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setValue(0)

@@ -18,6 +18,7 @@ from .i18n import tr, available_languages, get_language, set_language
 from .style import (
     apply_theme, get_theme_preference, set_theme_preference,
     get_show_splash_preference, set_show_splash_preference,
+    get_prevent_sleep_preference, set_prevent_sleep_preference,
 )
 from .widgets import ModelRowWidget, fit_action_button_width
 from .workers import ModelDownloadProcessWorker
@@ -387,6 +388,11 @@ class GeneralTab(QWidget):
         self._splash_checkbox.setChecked(get_show_splash_preference())
         self._splash_checkbox.toggled.connect(set_show_splash_preference)
         box_layout.addWidget(self._splash_checkbox)
+
+        self._prevent_sleep_checkbox = QCheckBox(tr("Prevent the system from sleeping while running"))
+        self._prevent_sleep_checkbox.setChecked(get_prevent_sleep_preference())
+        self._prevent_sleep_checkbox.toggled.connect(set_prevent_sleep_preference)
+        box_layout.addWidget(self._prevent_sleep_checkbox)
 
         return box
 

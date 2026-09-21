@@ -211,6 +211,7 @@ _UK = {
     "Interface language:": "Мова інтерфейсу:",
     "Interface": "Інтерфейс",
     "Show a splash screen on startup": "Показувати заставку при запуску",
+    "Prevent the system from sleeping while running": "Не давати системі переходити в сон під час роботи",
     "Hardware": "Обладнання",
     "CPU: {name}": "CPU: {name}",
     "GPU: {name}": "GPU: {name}",

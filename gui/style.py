@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication
 
 _THEME_KEY = "theme"  # "auto" | "light" | "dark", stored via QSettings
 _SPLASH_KEY = "show_splash"
+_PREVENT_SLEEP_KEY = "prevent_sleep"
 _CHECK_ICON = str((Path(__file__).parent / "assets" / "check.svg").resolve()).replace("\\", "/")
 
 
@@ -26,6 +27,14 @@ def get_show_splash_preference() -> bool:
 
 def set_show_splash_preference(value: bool) -> None:
     QSettings("MeetingScribe", "MeetingScribe").setValue(_SPLASH_KEY, value)
+
+
+def get_prevent_sleep_preference() -> bool:
+    return QSettings("MeetingScribe", "MeetingScribe").value(_PREVENT_SLEEP_KEY, True, type=bool)
+
+
+def set_prevent_sleep_preference(value: bool) -> None:
+    QSettings("MeetingScribe", "MeetingScribe").setValue(_PREVENT_SLEEP_KEY, value)
 
 
 def _system_is_dark() -> bool:
