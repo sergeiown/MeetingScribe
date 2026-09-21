@@ -69,6 +69,7 @@ Source: "{#SourceRoot}core\*"; DestDir: "{app}\core"; Flags: recursesubdirs igno
 Source: "{#SourceRoot}gui\*"; DestDir: "{app}\gui"; Flags: recursesubdirs ignoreversion; Excludes: "__pycache__\*,*.pyc"
 Source: "{#SourceRoot}samples\*"; DestDir: "{app}\samples"; Flags: recursesubdirs ignoreversion
 Source: "{#SourceRoot}img\icon.ico"; DestDir: "{app}\img"; Flags: ignoreversion
+Source: "{#SourceRoot}img\meetingscribe_cover.png"; DestDir: "{app}\img"; Flags: ignoreversion
 Source: "{#SourceRoot}run_gui.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}config.env.example"; DestDir: "{app}"; Flags: ignoreversion
