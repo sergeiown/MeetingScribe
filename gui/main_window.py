@@ -503,11 +503,22 @@ class MainWindow(QMainWindow):
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.checked.connect(lambda info: self._on_update_checked(info, manual))
+        worker.failed.connect(lambda err: self._on_update_check_failed(err, manual))
         worker.checked.connect(thread.quit)
+        worker.failed.connect(thread.quit)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
         self._update_check_thread = thread  # kept alive on self until it finishes
         thread.start()
+
+    def _on_update_check_failed(self, error, manual):
+        # The silent startup check stays silent on failure (e.g. offline) -
+        # only a manually-requested check reports it, so it's never
+        # mistaken for "you're up to date" when the check didn't complete.
+        if manual:
+            QMessageBox.warning(
+                self, tr("Check for updates"),
+                tr("Could not check for updates: {error}", error=error))
 
     def _on_update_checked(self, info, manual):
         if info and info.get("installer_url"):

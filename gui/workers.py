@@ -212,7 +212,11 @@ class UpdateCheckWorker(QObject):
     """Pure network check (GitHub Releases API) - no ML libraries touched,
     safe on a QThread like ModelDownloadWorker."""
 
-    checked = Signal(object)  # {"version": ..., "url": ...} or None
+    checked = Signal(object)  # {"version": ..., "url": ...} or None (checked fine, up to date)
+    failed = Signal(str)  # the check itself couldn't complete (network error etc.)
 
     def run(self):
-        self.checked.emit(core.check_for_update())
+        try:
+            self.checked.emit(core.check_for_update())
+        except Exception as e:
+            self.failed.emit(str(e))

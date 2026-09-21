@@ -30,36 +30,38 @@ def _parse_version(v: str):
 
 def check_for_update(timeout: float = 5.0):
     """{"version", "url", "installer_url", "installer_name", "installer_size"}
-    if a newer release exists, else None. installer_url is None when the
-    release has no MeetingScribe-Setup-*.exe asset - callers must then fall
-    back to opening the releases page. Never raises; a failed check just
-    means no update is reported."""
-    try:
-        req = urllib.request.Request(
-            _API_URL,
-            headers={"Accept": "application/vnd.github+json", "User-Agent": "MeetingScribe"},
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        latest_tag = data.get("tag_name", "")
-        if _parse_version(latest_tag) > _parse_version(VERSION):
-            installer_url = installer_name = None
-            installer_size = 0
-            for asset in data.get("assets") or []:
-                if _ASSET_NAME_RE.match(asset.get("name", "")):
-                    installer_url = asset.get("browser_download_url")
-                    installer_name = asset.get("name")
-                    installer_size = asset.get("size", 0)
-                    break
-            return {
-                "version": latest_tag,
-                "url": data.get("html_url") or f"https://github.com/{GITHUB_REPO}/releases/latest",
-                "installer_url": installer_url,
-                "installer_name": installer_name,
-                "installer_size": installer_size,
-            }
-    except Exception:
-        pass
+    if a newer release exists, else None (checked fine, already up to date).
+    installer_url is None when the release has no MeetingScribe-Setup-*.exe
+    asset - callers must then fall back to opening the releases page.
+
+    Raises on a failed check (network error, GitHub unreachable, etc.) -
+    callers distinguish that from a genuine "no update" themselves. The
+    silent startup check swallows it (see gui.main_window); the manual
+    Help > Check for updates shows it instead of falsely reporting
+    "you're up to date" for a check that never actually completed."""
+    req = urllib.request.Request(
+        _API_URL,
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "MeetingScribe"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    latest_tag = data.get("tag_name", "")
+    if _parse_version(latest_tag) > _parse_version(VERSION):
+        installer_url = installer_name = None
+        installer_size = 0
+        for asset in data.get("assets") or []:
+            if _ASSET_NAME_RE.match(asset.get("name", "")):
+                installer_url = asset.get("browser_download_url")
+                installer_name = asset.get("name")
+                installer_size = asset.get("size", 0)
+                break
+        return {
+            "version": latest_tag,
+            "url": data.get("html_url") or f"https://github.com/{GITHUB_REPO}/releases/latest",
+            "installer_url": installer_url,
+            "installer_name": installer_name,
+            "installer_size": installer_size,
+        }
     return None
 
 

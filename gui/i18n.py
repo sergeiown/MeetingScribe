@@ -86,6 +86,7 @@ _UK = {
         "Встановлені моделі, збережені спікери, токен Hugging Face, тема та мова інтерфейсу "
         "керуються з <b>Settings</b>.",
     "Check for updates": "Перевірити оновлення",
+    "Could not check for updates: {error}": "Не вдалося перевірити оновлення: {error}",
     "Update available": "Доступне оновлення",
     "MeetingScribe {version} is available (you have v{current}).":
         "Доступна MeetingScribe {version} (у вас v{current}).",
