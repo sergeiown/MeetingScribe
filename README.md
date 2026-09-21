@@ -104,7 +104,7 @@ MeetingScribe checks for updates on launch (and via **Help > Check for
 updates**); installing one is a single confirmation away.
 
 Prefer to run from source instead? See `setup.bat` and `run_gui.bat` in the
-project root, or `packaging/README.md` for building the installer yourself.
+project root.
 
 ## Configuration (HuggingFace token)
 

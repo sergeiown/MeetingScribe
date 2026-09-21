@@ -1,8 +1,8 @@
 ; MeetingScribe installer - Inno Setup script.
 ;
-; Ships only source files, a minimal PySide6 install, and a tiny native
-; launcher exe. Heavy ML dependencies (torch, pyannote.audio, faster-whisper)
-; are installed by the app itself on first launch (see gui/bootstrap.py).
+; Ships only source files and a minimal PySide6 install. Heavy ML
+; dependencies (torch, pyannote.audio, faster-whisper) are installed by the
+; app itself on first launch (see gui/bootstrap.py).
 ;
 ; All Python dependencies go into a dedicated venv at {app}\venv, never the
 ; system/user Python, so uninstall (see [UninstallDelete]) can remove
@@ -11,18 +11,22 @@
 ; System Python and ffmpeg are installed via winget if missing (see [Code]) -
 ; both are real prerequisites the app itself can't bundle.
 ;
-; The launcher (launcher/launcher.py, built via PyInstaller - see README.md
-; in this folder) only spawns the venv's pythonw.exe on run_gui.py with no
-; console window; it does not itself contain the app.
+; Shortcuts launch the venv's own pythonw.exe directly on run_gui.py (no
+; console window - that's what the "w" in pythonw is for) instead of a
+; custom-built launcher exe. A prior PyInstaller-frozen launcher.exe was
+; tried and dropped: being a brand-new, unsigned, never-seen binary, it got
+; silently quarantined by Windows Defender's cloud/heuristic scanning some
+; time after install on more than one machine, breaking the Start Menu/
+; desktop shortcuts. pythonw.exe is Microsoft-signed and already trusted,
+; so it isn't subject to that risk.
 ;
-; Build: see README.md in this folder.
+; Build: see BUILDING.md in this folder.
 ; Output: packaging\dist\MeetingScribe-Setup-<version>.exe
 
 #define MyAppName "MeetingScribe"
 #define MyAppVersion "2.0.0"
 #define MyAppPublisher "Serhii Myshko"
 #define MyAppURL "https://github.com/sergeiown/MeetingScribe"
-#define MyAppExeName "MeetingScribe.exe"
 #define SourceRoot "..\"
 
 [Setup]
@@ -61,29 +65,26 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"
 
 [Files]
-Source: "launcher\dist\MeetingScribe.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}core\*"; DestDir: "{app}\core"; Flags: recursesubdirs ignoreversion; Excludes: "__pycache__\*,*.pyc"
 Source: "{#SourceRoot}gui\*"; DestDir: "{app}\gui"; Flags: recursesubdirs ignoreversion; Excludes: "__pycache__\*,*.pyc"
 Source: "{#SourceRoot}samples\*"; DestDir: "{app}\samples"; Flags: recursesubdirs ignoreversion
 Source: "{#SourceRoot}img\icon.ico"; DestDir: "{app}\img"; Flags: ignoreversion
 Source: "{#SourceRoot}run_gui.py"; DestDir: "{app}"; Flags: ignoreversion
-; run_gui.bat ships too, as a console-visible fallback for troubleshooting -
-; it is not the default shortcut target (MeetingScribe.exe is).
 Source: "{#SourceRoot}run_gui.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}config.env.example"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\img\icon.ico"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\venv\Scripts\pythonw.exe"; Parameters: """{app}\run_gui.py"""; WorkingDir: "{app}"; IconFilename: "{app}\img\icon.ico"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{app}\img\icon.ico"
-Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\img\icon.ico"; Tasks: desktopicon
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\venv\Scripts\pythonw.exe"; Parameters: """{app}\run_gui.py"""; WorkingDir: "{app}"; IconFilename: "{app}\img\icon.ico"; Tasks: desktopicon
 
 [Run]
 ; No skipifsilent: the in-app updater runs this with /SILENT and needs the
 ; app to relaunch itself afterward (see core.spawn_installer). A normal
 ; interactive install still shows this as an optional, user-visible checkbox.
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait
+Filename: "{app}\venv\Scripts\pythonw.exe"; Parameters: """{app}\run_gui.py"""; WorkingDir: "{app}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait
 
 [UninstallDelete]
 ; The venv isn't tracked by [Files] since it's created at runtime, not

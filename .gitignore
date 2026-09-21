@@ -12,9 +12,10 @@ logs/
 __pycache__/
 *.pyc
 
-# Installer/launcher build output
+# Installer build output
 packaging/dist/
 packaging/*.log
-packaging/launcher/build/
-packaging/launcher/dist/
-packaging/launcher/*.spec
+
+# Local-only build notes - not meant for the public repo (see README badges/
+# language-switcher rule: only README.md/README.uk.md belong in GitHub's view)
+packaging/BUILDING.md
