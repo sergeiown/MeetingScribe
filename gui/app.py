@@ -2,6 +2,7 @@
 
 import shutil
 import sys
+import time
 
 import core
 
@@ -15,6 +16,7 @@ from .main_window import MainWindow
 from .style import apply_theme, get_theme_preference, get_show_splash_preference
 
 _SPLASH_WIDTH = 640
+_SPLASH_MIN_SECONDS = 3.0
 
 
 def _seed_demo_input():
@@ -85,6 +87,7 @@ def main():
     # Skipped ahead of a first-run bootstrap: that flow has its own, much
     # longer-running progress dialog, and the two would just overlap.
     splash = None
+    splash_shown_at = None
     if get_show_splash_preference() and not needs_bootstrap:
         splash_path = core.SCRIPT_DIR / "img" / "meetingscribe_cover.png"
         if splash_path.exists():
@@ -93,6 +96,7 @@ def main():
             splash = QSplashScreen(pixmap)
             splash.show()
             app.processEvents()
+            splash_shown_at = time.monotonic()
 
     ok, model_error = ensure_dependencies(
         core.SCRIPT_DIR / "requirements.txt",
@@ -110,6 +114,11 @@ def main():
 
     window = MainWindow()
     if splash is not None:
+        # Guarantees the splash is actually visible for a bit, even when
+        # startup is fast enough that it would otherwise flash by unread.
+        while time.monotonic() - splash_shown_at < _SPLASH_MIN_SECONDS:
+            app.processEvents()
+            time.sleep(0.05)
         splash.finish(window)
     window.show()
     sys.exit(app.exec())
