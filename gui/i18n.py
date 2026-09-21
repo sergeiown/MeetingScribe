@@ -111,6 +111,7 @@ _UK = {
         "підписаний цифровим підписом - це очікувано.",
     "Update failed": "Помилка оновлення",
     "Could not start the installer: {error}": "Не вдалося запустити інсталятор: {error}",
+    "MeetingScribe is already running.": "MeetingScribe вже запущено.",
     "Delete files": "Видалення файлів",
     "Select one or more files in the table first.": "Спочатку виберіть один або кілька файлів у таблиці.",
     "No files selected": "Файли не вибрані",

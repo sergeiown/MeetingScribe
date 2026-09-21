@@ -6,7 +6,7 @@ from pathlib import Path
 
 import core
 
-from PySide6.QtCore import Qt, QSettings, QThread, QUrl
+from PySide6.QtCore import Qt, QSettings, QThread, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QTextCursor, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMainWindow, QWidget, QVBoxLayout,
@@ -27,6 +27,7 @@ _PREFERRED_HEIGHT = 680
 _MIN_WIDTH = 760
 _MIN_HEIGHT = 480
 _SIDEBAR_WIDTH = 300
+_STARTUP_UPDATE_CHECK_DELAY_MS = 10_000
 
 _ABOUT_TEXT = (
     "<b>MeetingScribe</b> v{version}<br><br>"
@@ -69,7 +70,9 @@ class MainWindow(QMainWindow):
         self._refresh_file_list()
         self._refresh_model_choices()
         self._refresh_diarize_availability()
-        self._check_for_updates(manual=False)
+        # Delayed so it never competes with startup itself for network/CPU,
+        # and so a quick "open, do one thing, close" session never triggers it at all.
+        QTimer.singleShot(_STARTUP_UPDATE_CHECK_DELAY_MS, lambda: self._check_for_updates(manual=False))
 
     def _apply_initial_geometry(self):
         """Fits the window to the available screen area (a fixed pixel size

@@ -17,6 +17,8 @@ from .style import apply_theme, get_theme_preference, get_show_splash_preference
 
 _SPLASH_WIDTH = 640
 _SPLASH_MIN_SECONDS = 3.0
+_SINGLE_INSTANCE_MUTEX_NAME = "Global\\MeetingScribe-SingleInstance"
+_single_instance_mutex_handle = None
 
 
 def _seed_demo_input():
@@ -56,10 +58,31 @@ def _set_windows_app_id():
         pass
 
 
+def _acquire_single_instance_lock():
+    """Windows named mutex held for this process's lifetime - released
+    automatically on exit or crash, so it can never get stuck locked. Guards
+    against two copies ending up open at once, e.g. if an in-app update
+    relaunches the new version before the old process has fully exited."""
+    if sys.platform != "win32":
+        return True
+    import ctypes
+    global _single_instance_mutex_handle
+    ERROR_ALREADY_EXISTS = 183
+    handle = ctypes.windll.kernel32.CreateMutexW(None, False, _SINGLE_INSTANCE_MUTEX_NAME)
+    if ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return False
+    _single_instance_mutex_handle = handle
+    return True
+
+
 def main():
     _set_windows_app_id()
     app = QApplication(sys.argv)
     app.setApplicationName("MeetingScribe")
+    if not _acquire_single_instance_lock():
+        QMessageBox.warning(None, tr("MeetingScribe"), tr("MeetingScribe is already running."))
+        sys.exit(0)
     icon_path = core.SCRIPT_DIR / "img" / "icon.ico"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
