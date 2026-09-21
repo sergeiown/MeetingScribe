@@ -444,6 +444,7 @@ class MainWindow(QMainWindow):
         selected = self._selected_files()
         diarizable = available and any(core.file_status(f)[1] for f in selected)
         self._diarize_btn.setEnabled(diarizable and self._worker is None)
+        self._set_primary_run_button(self._diarize_btn if diarizable else self._transcribe_btn)
         if not available:
             self._diarize_btn.setToolTip(
                 self._diarize_unavailable_message(has_package, has_token, models_missing))
@@ -452,6 +453,17 @@ class MainWindow(QMainWindow):
                 tr("Select a recognized file that hasn't had speakers identified yet."))
         else:
             self._diarize_btn.setToolTip("")
+
+    def _set_primary_run_button(self, primary_btn):
+        """Highlights whichever action actually applies to the current
+        selection - Identify speakers once a selected file is transcribed
+        but not yet diarized, Recognize speech otherwise."""
+        for btn in (self._transcribe_btn, self._diarize_btn):
+            name = "primaryButton" if btn is primary_btn else ""
+            if btn.objectName() != name:
+                btn.setObjectName(name)
+                btn.style().unpolish(btn)
+                btn.style().polish(btn)
 
     # --- actions -----------------------------------------------------------
 
