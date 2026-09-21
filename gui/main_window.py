@@ -171,6 +171,7 @@ class MainWindow(QMainWindow):
         default_lang = QSettings("MeetingScribe", "MeetingScribe").value("default_language", "auto")
         idx = self._lang_combo.findData(default_lang)
         self._lang_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
         self._model_label = QLabel(tr("Model:"))
         self._language_label = QLabel(tr("Language:"))
         options_form.addRow(self._model_label, self._model_combo)
@@ -402,6 +403,11 @@ class MainWindow(QMainWindow):
             QToolTip.showText(pos, self._diarize_unavailable_reason, self._diarize_checkbox)
             return
         self._num_speakers_spin.setEnabled(checked)
+        QSettings("MeetingScribe", "MeetingScribe").setValue("diarize_default", checked)
+
+    def _on_language_changed(self, _index):
+        QSettings("MeetingScribe", "MeetingScribe").setValue(
+            "default_language", self._lang_combo.currentData())
 
     def _refresh_diarize_button(self):
         """Enabled only once a file is recognized but not yet diarized, and

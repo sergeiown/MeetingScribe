@@ -4,12 +4,12 @@ from pathlib import Path
 
 import core
 
-from PySide6.QtCore import Qt, QThread, QSettings
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QHeaderView, QTableWidget, QTableWidgetItem, QLineEdit, QPushButton, QComboBox,
-    QCheckBox, QLabel, QMessageBox, QInputDialog, QToolButton, QFileDialog, QScrollArea,
+    QLabel, QMessageBox, QInputDialog, QToolButton, QFileDialog, QScrollArea,
 )
 
 from .device_prefs import get_device_preference, set_device_preference
@@ -300,24 +300,7 @@ class SpeakersTab(QWidget):
 class GeneralTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._settings = QSettings("MeetingScribe", "MeetingScribe")
         layout = QVBoxLayout(self)
-
-        layout.addWidget(QLabel(tr("Default language:")))
-        self._lang_combo = QComboBox()
-        self._lang_combo.addItem(tr("Auto-detect"), "auto")
-        self._lang_combo.addItem(tr("Ukrainian"), "uk")
-        idx = self._lang_combo.findData(self._settings.value("default_language", "auto"))
-        self._lang_combo.setCurrentIndex(idx if idx >= 0 else 0)
-        self._lang_combo.currentIndexChanged.connect(
-            lambda _i: self._settings.setValue("default_language", self._lang_combo.currentData()))
-        layout.addWidget(self._lang_combo)
-
-        self._diarize_checkbox = QCheckBox(tr("Enable speaker diarization by default"))
-        self._diarize_checkbox.setChecked(self._settings.value("diarize_default", True, type=bool))
-        self._diarize_checkbox.toggled.connect(
-            lambda v: self._settings.setValue("diarize_default", v))
-        layout.addWidget(self._diarize_checkbox)
 
         layout.addWidget(QLabel(tr("Theme:")))
         self._theme_combo = QComboBox()
