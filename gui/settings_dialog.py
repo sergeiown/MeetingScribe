@@ -9,7 +9,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QHeaderView, QTableWidget, QTableWidgetItem, QLineEdit, QPushButton, QComboBox,
-    QLabel, QMessageBox, QInputDialog, QToolButton, QFileDialog, QScrollArea,
+    QLabel, QMessageBox, QInputDialog, QToolButton, QFileDialog, QScrollArea, QFrame,
 )
 
 from .device_prefs import get_device_preference, set_device_preference
@@ -52,6 +52,7 @@ class ModelsTab(QWidget):
         for spec in core.WHISPER_MODELS:
             row = ModelRowWidget(spec.label, spec.size, spec.description, core.is_whisper_installed(spec.key))
             row.download_requested.connect(lambda s=spec: self._start_download(s))
+            row.delete_requested.connect(lambda s=spec: self._delete_whisper(s))
             rec_layout.addWidget(row)
             self._rows[spec.key] = (row, spec)
         layout.addWidget(rec_box)
@@ -59,16 +60,26 @@ class ModelsTab(QWidget):
         diar_box = QGroupBox(tr("Diarization (pyannote)"))
         diar_layout = QVBoxLayout(diar_box)
         diar_layout.setSpacing(10)
+
+        # Same card treatment (QFrame#modelRow, see style.py) as the model
+        # row below it, so the token block and the download row read as two
+        # equally-weighted cards instead of one floating loose above a card.
+        token_card = QFrame()
+        token_card.setObjectName("modelRow")
+        token_card_layout = QVBoxLayout(token_card)
+        token_card_layout.setContentsMargins(12, 10, 12, 10)
+        token_card_layout.setSpacing(4)
+
         note = QLabel(tr(_PYANNOTE_NOTE))
         note.setOpenExternalLinks(True)
         note.setWordWrap(True)
-        diar_layout.addWidget(note)
+        token_card_layout.addWidget(note)
 
         # The token lives here, not in General, since it's only needed for these gated models.
         token_label = QLabel(tr(
             'Hugging Face token: <a href="https://huggingface.co/settings/tokens">get one here</a>'))
         token_label.setOpenExternalLinks(True)
-        diar_layout.addWidget(token_label)
+        token_card_layout.addWidget(token_label)
         token_row = QHBoxLayout()
         self._token_edit = QLineEdit(core.read_hf_token())
         self._token_edit.setEchoMode(QLineEdit.Password)
@@ -81,7 +92,8 @@ class ModelsTab(QWidget):
         save_token_btn = QPushButton(tr("Save token"))
         save_token_btn.clicked.connect(self._save_token)
         token_row.addWidget(save_token_btn)
-        diar_layout.addLayout(token_row)
+        token_card_layout.addLayout(token_row)
+        diar_layout.addWidget(token_card)
 
         # The four pyannote models are only useful together, so they're
         # offered as one combined download instead of four separate ones.
@@ -89,6 +101,7 @@ class ModelsTab(QWidget):
             core.DIARIZATION_BUNDLE_LABEL, core.DIARIZATION_BUNDLE_SIZE,
             core.DIARIZATION_BUNDLE_DESCRIPTION, core.is_diarization_complete())
         self._diarization_row.download_requested.connect(self._start_diarization_download)
+        self._diarization_row.delete_requested.connect(self._delete_diarization)
         diar_layout.addWidget(self._diarization_row)
         layout.addWidget(diar_box)
         layout.addStretch()
@@ -118,7 +131,7 @@ class ModelsTab(QWidget):
             core.download_whisper_model(spec.key, spec.hf_repo, token, cancel_token=ct, on_progress=on_progress)
 
         row, _ = self._rows[spec.key]
-        self._run_download(row, fn)
+        self._run_download(row, fn, lambda spec=spec: core.is_whisper_installed(spec.key))
 
     def _start_diarization_download(self):
         token = core.read_hf_token()
@@ -126,20 +139,55 @@ class ModelsTab(QWidget):
         def fn(ct, on_progress, token=token):
             core.download_diarization_models(token, cancel_token=ct, on_progress=on_progress)
 
-        self._run_download(self._diarization_row, fn)
+        self._run_download(self._diarization_row, fn, core.is_diarization_complete)
 
-    def _run_download(self, row, fn):
+    def _delete_whisper(self, spec):
+        if QMessageBox.question(
+                self, tr("Delete model"),
+                tr('Delete the "{name}" model ({size})? You can download it again anytime.',
+                   name=spec.label, size=spec.size)) != QMessageBox.Yes:
+            return
+        core.delete_whisper_model(spec.key)
+        row, _ = self._rows[spec.key]
+        row.set_installed(False)
+
+    def _delete_diarization(self):
+        if QMessageBox.question(
+                self, tr("Delete model"),
+                tr("Delete the diarization models? Speaker identification will be "
+                   "unavailable until you download them again.")) != QMessageBox.Yes:
+            return
+        core.delete_diarization_models()
+        self._diarization_row.set_installed(False)
+
+    def _run_download(self, row, fn, check_installed):
+        # worker.finished also fires on a cooperative cancel (see
+        # ModelDownloadWorker.run()'s except Cancelled branch) - checking the
+        # real on-disk state here, rather than trusting the signal alone,
+        # keeps a Stop-clicked row from being mislabeled "Installed".
+        def on_finished():
+            if check_installed():
+                row.set_done(True)
+            else:
+                row.set_installed(False)
+
         thread = QThread()
         worker = ModelDownloadWorker(fn)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(row.set_downloading)
-        worker.finished.connect(lambda: row.set_done(True))
+        worker.finished.connect(on_finished)
         worker.failed.connect(lambda err: row.set_done(False, err))
         worker.finished.connect(thread.quit)
         worker.failed.connect(thread.quit)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
+        # DirectConnection: while run() is mid-loop, worker's own thread isn't
+        # spinning its event loop, so a normal (queued) cross-thread
+        # connection here would just sit undelivered until run() returns on
+        # its own - cancel_token.cancel() only touches a threading.Event, so
+        # calling it synchronously from the GUI thread is safe.
+        row.cancel_requested.connect(worker.cancel, Qt.DirectConnection)
         entry = (thread, worker)
         self._active_downloads.append(entry)
         thread.finished.connect(lambda: self._active_downloads.remove(entry) if entry in self._active_downloads else None)

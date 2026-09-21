@@ -231,3 +231,17 @@ def download_diarization_models(hf_token: str, *, models_dir: Path = MODELS_DIR,
         bytes_before += size
     if on_progress:
         on_progress(float(total), float(total), "done")
+
+
+def _rmtree(path: Path) -> None:
+    import shutil
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def delete_whisper_model(size: str, *, models_dir: Path = MODELS_DIR) -> None:
+    _rmtree(models_dir / size)
+
+
+def delete_diarization_models(*, models_dir: Path = MODELS_DIR) -> None:
+    for spec in PYANNOTE_MODELS:
+        _rmtree(models_dir / ("models--" + spec.key.replace("/", "--")))

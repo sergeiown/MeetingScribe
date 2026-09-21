@@ -32,11 +32,16 @@ class _ElidedLabel(QLabel):
 
 
 class ModelRowWidget(QFrame):
-    """One row in the Models tab: name/size/status/Download on top, a short
-    description underneath. The Download button turns into a progress bar
-    while active."""
+    """One row in the Models tab: name/size/status/action-button on top, a
+    short description underneath. The single action button always shows
+    whatever's relevant to the current state (Download/Stop/Delete), so a
+    row is never left with dead reserved space where a hidden button would
+    otherwise have been - the progress bar always reaches the same right
+    edge the button itself sits at."""
 
     download_requested = Signal()
+    cancel_requested = Signal()
+    delete_requested = Signal()
 
     def __init__(self, label, size, description, installed, parent=None):
         super().__init__(parent)
@@ -62,18 +67,10 @@ class ModelRowWidget(QFrame):
         self._progress.setVisible(False)
         top_row.addWidget(self._progress)
 
-        self._download_btn = QPushButton(tr("Download"))
-        self._download_btn.clicked.connect(self.download_requested.emit)
-        top_row.addWidget(self._download_btn)
+        self._action_btn = QPushButton()
+        self._action_btn.clicked.connect(self._on_action_clicked)
+        top_row.addWidget(self._action_btn)
         outer.addLayout(top_row)
-
-        # The button (tallest element, via its padding) reserves its height
-        # even while hidden, so a row doesn't get visibly shorter once its
-        # model is installed and the button disappears - every row in the
-        # list then lines up at the same height regardless of state.
-        policy = self._download_btn.sizePolicy()
-        policy.setRetainSizeWhenHidden(True)
-        self._download_btn.setSizePolicy(policy)
 
         if description:
             desc_label = _ElidedLabel(description)
@@ -81,26 +78,42 @@ class ModelRowWidget(QFrame):
             outer.addWidget(desc_label)
 
         self._download_start_time = None
+        self._mode = None  # "download" | "cancel" | "delete"
         self.set_installed(installed)
+
+    def _on_action_clicked(self):
+        if self._mode == "download":
+            self.download_requested.emit()
+        elif self._mode == "cancel":
+            self.cancel_requested.emit()
+        elif self._mode == "delete":
+            self.delete_requested.emit()
 
     def set_installed(self, installed: bool):
         self._status_label.setText(tr("Installed") if installed else tr("Not installed"))
         self._status_label.setVisible(True)
-        self._download_btn.setVisible(not installed)
         self._progress.setVisible(False)
+        self._mode = "delete" if installed else "download"
+        self._action_btn.setText(tr("Delete") if installed else tr("Download"))
+        self._action_btn.setEnabled(True)
+        self._action_btn.setToolTip("")
 
     def set_needs_token(self, needs_token: bool):
-        self._download_btn.setEnabled(not needs_token)
-        self._download_btn.setToolTip(
-            tr("Needs HF_TOKEN - enter it above") if needs_token else "")
+        # Only meaningful while offering a fresh download - Delete/Stop never need a token.
+        if self._mode == "download":
+            self._action_btn.setEnabled(not needs_token)
+            self._action_btn.setToolTip(tr("Needs HF_TOKEN - enter it above") if needs_token else "")
 
     def set_downloading(self, current: float, total: float, label: str = ""):
         if not self._progress.isVisible():
             self._download_start_time = time.time()
-        self._download_btn.setVisible(False)
         # Hide the status text while the progress bar (which shows its own %/ETA) is up.
         self._status_label.setVisible(False)
         self._progress.setVisible(True)
+        self._mode = "cancel"
+        self._action_btn.setText(tr("Stop"))
+        self._action_btn.setEnabled(True)
+        self._action_btn.setToolTip("")
         if total > 0:
             pct = min(current / total, 1.0)
             self._progress.setRange(0, 100)
@@ -121,6 +134,8 @@ class ModelRowWidget(QFrame):
         if ok:
             self.set_installed(True)
         else:
-            self._download_btn.setVisible(True)
+            self._mode = "download"
+            self._action_btn.setText(tr("Download"))
+            self._action_btn.setEnabled(True)
             self._status_label.setText(tr("Failed: {error}", error=error[:60]) if error else tr("Failed"))
             self._status_label.setVisible(True)

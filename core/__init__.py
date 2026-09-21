@@ -48,6 +48,7 @@ from .models_catalog import (
     installed_whisper_sizes, is_whisper_installed, is_pyannote_installed, is_diarization_complete,
     recommend_whisper_model, download_whisper_model, download_pyannote_model,
     download_diarization_models, whisper_model_bytes,
+    delete_whisper_model, delete_diarization_models,
 )
 from .config_env import (
     read_config_env, write_config_env, read_hf_token,
@@ -81,6 +82,7 @@ __all__ = [
     "installed_whisper_sizes", "is_whisper_installed", "is_pyannote_installed", "is_diarization_complete",
     "recommend_whisper_model", "download_whisper_model", "download_pyannote_model",
     "download_diarization_models", "whisper_model_bytes",
+    "delete_whisper_model", "delete_diarization_models",
     "read_config_env", "write_config_env", "read_hf_token",
     "has_diarization_support", "is_diar_pipeline_cached",
     "save_result", "save_segments", "load_segments", "file_status",
