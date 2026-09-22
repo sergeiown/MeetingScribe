@@ -8,13 +8,13 @@ from pathlib import Path
 import core
 
 from PySide6.QtCore import Qt, QSettings, QThread, QTimer, QUrl
-from PySide6.QtGui import QAction, QDesktopServices, QTextCursor, QColor
+from PySide6.QtGui import QDesktopServices, QTextCursor, QColor
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem,
     QPushButton, QComboBox, QCheckBox, QLabel, QProgressBar, QTextEdit, QSlider,
-    QFileDialog, QMessageBox, QSpinBox, QToolTip,
+    QFileDialog, QMessageBox, QSpinBox, QToolTip, QToolButton, QMenu,
 )
 
 from .device_prefs import get_device_preference
@@ -111,36 +111,60 @@ class MainWindow(QMainWindow):
         self.move(avail.center().x() - width // 2, avail.center().y() - height // 2)
 
     def _build_ui(self):
-        # QMenuBar instead of QToolBar: same slim height, without a mostly-empty toolbar row.
-        menu_bar = self.menuBar()
-        self._settings_action = QAction(tr("Settings"), self)
-        self._settings_action.triggered.connect(self._open_settings)
-        menu_bar.addAction(self._settings_action)
-
-        self._help_menu = menu_bar.addMenu(tr("Help"))
-        self._how_to_use_action = QAction(tr("How to use"), self)
-        self._how_to_use_action.triggered.connect(self._show_how_to_use)
-        self._help_menu.addAction(self._how_to_use_action)
-        self._check_updates_action = QAction(tr("Check for updates"), self)
-        self._check_updates_action.triggered.connect(lambda: self._check_for_updates(manual=True))
-        self._help_menu.addAction(self._check_updates_action)
-        self._about_action = QAction(tr("About"), self)
-        self._about_action.triggered.connect(self._show_about)
-        self._help_menu.addAction(self._about_action)
-
-        self._exit_action = QAction(tr("Exit"), self)
-        self._exit_action.triggered.connect(self.close)
-        menu_bar.addAction(self._exit_action)
-
+        # A plain sized-to-content button row instead of QMainWindow's own
+        # menuBar(): a real QMenuBar always spans the full window width, so
+        # with only three items it was mostly empty dark bar - especially
+        # once the window widened for the recording panel. QToolButtons in
+        # a normal row take only the width their labels need.
         central = QWidget()
         self.setCentralWidget(central)
-        root = QHBoxLayout(central)
-        root.setContentsMargins(16, 16, 16, 16)
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+        central_layout.addLayout(self._build_top_row())
+
+        root = QHBoxLayout()
+        root.setContentsMargins(16, 12, 16, 16)
         root.setSpacing(16)
+        central_layout.addLayout(root)
 
         root.addWidget(self._build_recording_panel())
         root.addLayout(self._build_main_column(), stretch=1)
         root.addWidget(self._build_sidebar())
+
+    def _build_top_row(self):
+        row = QHBoxLayout()
+        row.setContentsMargins(12, 6, 12, 4)
+        row.setSpacing(4)
+
+        self._settings_btn = QToolButton()
+        self._settings_btn.setText(tr("Settings"))
+        self._settings_btn.setAutoRaise(True)
+        self._settings_btn.clicked.connect(self._open_settings)
+        row.addWidget(self._settings_btn)
+
+        self._help_btn = QToolButton()
+        self._help_btn.setText(tr("Help"))
+        self._help_btn.setAutoRaise(True)
+        self._help_btn.setPopupMode(QToolButton.InstantPopup)
+        self._help_menu = QMenu(self._help_btn)
+        self._how_to_use_action = self._help_menu.addAction(tr("How to use"))
+        self._how_to_use_action.triggered.connect(self._show_how_to_use)
+        self._check_updates_action = self._help_menu.addAction(tr("Check for updates"))
+        self._check_updates_action.triggered.connect(lambda: self._check_for_updates(manual=True))
+        self._about_action = self._help_menu.addAction(tr("About"))
+        self._about_action.triggered.connect(self._show_about)
+        self._help_btn.setMenu(self._help_menu)
+        row.addWidget(self._help_btn)
+
+        self._exit_btn = QToolButton()
+        self._exit_btn.setText(tr("Exit"))
+        self._exit_btn.setAutoRaise(True)
+        self._exit_btn.clicked.connect(self.close)
+        row.addWidget(self._exit_btn)
+
+        row.addStretch()
+        return row
 
     def _build_recording_panel(self):
         panel = QWidget()
@@ -489,12 +513,12 @@ class MainWindow(QMainWindow):
     def retranslate_ui(self):
         """Re-applies static text after a language change; content already
         written into the transcript view is left as-is."""
-        self._settings_action.setText(tr("Settings"))
-        self._help_menu.setTitle(tr("Help"))
+        self._settings_btn.setText(tr("Settings"))
+        self._help_btn.setText(tr("Help"))
         self._how_to_use_action.setText(tr("How to use"))
         self._check_updates_action.setText(tr("Check for updates"))
         self._about_action.setText(tr("About"))
-        self._exit_action.setText(tr("Exit"))
+        self._exit_btn.setText(tr("Exit"))
 
         self._files_box.setTitle(tr("Files"))
         self._file_table.setHorizontalHeaderLabels(
