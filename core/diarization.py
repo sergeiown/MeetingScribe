@@ -55,7 +55,16 @@ def diarize(wav_path: str, hf_token: str, num_speakers: Optional[int] = None, *,
     with silence():
         try:
             if diar_local.exists():
-                pipeline = Pipeline.from_pretrained(str(diar_local), token=hf_token)
+                # Offline-first even here: without local_files_only, this still
+                # reaches out to the Hub before falling back to the local
+                # cache, which can hang for a long time (no visible error - a
+                # confirmed real report) on a slow/flaky connection, for a
+                # model that's already fully installed and needs no network at all.
+                try:
+                    pipeline = Pipeline.from_pretrained(
+                        str(diar_local), token=hf_token, local_files_only=True)
+                except Exception:
+                    pipeline = Pipeline.from_pretrained(str(diar_local), token=hf_token)
             else:
                 try:
                     pipeline = Pipeline.from_pretrained(
