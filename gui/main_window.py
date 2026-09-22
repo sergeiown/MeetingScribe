@@ -179,27 +179,42 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(self._record_box)
         layout.setSpacing(10)
 
+        checkbox_row = QHBoxLayout()
         self._mic_checkbox = QCheckBox(tr("Microphone"))
         self._mic_checkbox.setChecked(get_use_microphone())
         self._mic_checkbox.toggled.connect(self._on_mic_checkbox_toggled)
-        layout.addWidget(self._mic_checkbox)
-
-        self._mic_meter_label = QLabel()
-        self._mic_meter_label.setProperty("hint", True)
-        layout.addWidget(self._mic_meter_label)
-        self._mic_meter = LevelMeterWidget()
-        layout.addWidget(self._mic_meter)
-
+        checkbox_row.addWidget(self._mic_checkbox)
         self._system_checkbox = QCheckBox(tr("System audio"))
         self._system_checkbox.setChecked(get_use_system_audio())
         self._system_checkbox.toggled.connect(self._on_system_checkbox_toggled)
-        layout.addWidget(self._system_checkbox)
+        checkbox_row.addWidget(self._system_checkbox)
+        layout.addLayout(checkbox_row)
 
+        # Vertical meters side by side, given the panel's remaining free
+        # height (stretch=1) - more space to actually read the level in
+        # than a couple of thin horizontal strips would give.
+        meters_row = QHBoxLayout()
+        meters_row.setSpacing(12)
+
+        mic_col = QVBoxLayout()
+        self._mic_meter_label = QLabel()
+        self._mic_meter_label.setProperty("hint", True)
+        self._mic_meter_label.setAlignment(Qt.AlignCenter)
+        mic_col.addWidget(self._mic_meter_label)
+        self._mic_meter = LevelMeterWidget()
+        mic_col.addWidget(self._mic_meter, stretch=1)
+        meters_row.addLayout(mic_col)
+
+        system_col = QVBoxLayout()
         self._system_meter_label = QLabel()
         self._system_meter_label.setProperty("hint", True)
-        layout.addWidget(self._system_meter_label)
+        self._system_meter_label.setAlignment(Qt.AlignCenter)
+        system_col.addWidget(self._system_meter_label)
         self._system_meter = LevelMeterWidget()
-        layout.addWidget(self._system_meter)
+        system_col.addWidget(self._system_meter, stretch=1)
+        meters_row.addLayout(system_col)
+
+        layout.addLayout(meters_row, stretch=1)
 
         self._record_elapsed_label = QLabel("00:00")
         self._record_elapsed_label.setProperty("hint", True)
@@ -211,11 +226,25 @@ class MainWindow(QMainWindow):
         self._record_btn.clicked.connect(self._on_record_clicked)
         layout.addWidget(self._record_btn)
 
-        layout.addStretch()
+        self._active_record_row = QHBoxLayout()
+        self._pause_btn = QPushButton(tr("Pause"))
+        self._pause_btn.clicked.connect(self._on_pause_clicked)
+        self._stop_btn = QPushButton(tr("Stop"))
+        self._stop_btn.clicked.connect(self._stop_recording)
+        self._active_record_row.addWidget(self._pause_btn)
+        self._active_record_row.addWidget(self._stop_btn)
+        layout.addLayout(self._active_record_row)
+        self._set_active_record_row_visible(False)
+
         outer.addWidget(self._record_box)
 
         self._update_source_meter_visibility()
         return panel
+
+    def _set_active_record_row_visible(self, visible):
+        self._record_btn.setVisible(not visible)
+        self._pause_btn.setVisible(visible)
+        self._stop_btn.setVisible(visible)
 
     def _on_mic_checkbox_toggled(self, checked):
         if not checked and not self._system_checkbox.isChecked():
@@ -241,10 +270,17 @@ class MainWindow(QMainWindow):
         self._system_meter_label.setText(tr("System audio level"))
 
     def _on_record_clicked(self):
+        self._start_recording()
+
+    def _on_pause_clicked(self):
         if self._recording_controller is None:
-            self._start_recording()
+            return
+        if self._recording_controller.is_paused:
+            self._recording_controller.resume()
+            self._pause_btn.setText(tr("Pause"))
         else:
-            self._stop_recording()
+            self._recording_controller.pause()
+            self._pause_btn.setText(tr("Resume"))
 
     def _start_recording(self):
         use_mic = self._mic_checkbox.isChecked()
@@ -279,7 +315,8 @@ class MainWindow(QMainWindow):
 
         self._recording_controller = controller
         self._elapsed_timer.start(500)
-        self._record_btn.setText(tr("Stop"))
+        self._pause_btn.setText(tr("Pause"))
+        self._set_active_record_row_visible(True)
         self._mic_checkbox.setEnabled(False)
         self._system_checkbox.setEnabled(False)
 
@@ -308,7 +345,7 @@ class MainWindow(QMainWindow):
         self._mic_meter.reset()
         self._system_meter.reset()
         self._record_elapsed_label.setText("00:00")
-        self._record_btn.setText(tr("Record"))
+        self._set_active_record_row_visible(False)
         self._mic_checkbox.setEnabled(True)
         self._system_checkbox.setEnabled(True)
         self._refresh_file_list(select_all=False)
@@ -558,8 +595,11 @@ class MainWindow(QMainWindow):
         self._system_checkbox.setText(tr("System audio"))
         self._mic_meter_label.setText(tr("Microphone level"))
         self._system_meter_label.setText(tr("System audio level"))
+        self._stop_btn.setText(tr("Stop"))
         if self._recording_controller is None:
             self._record_btn.setText(tr("Record"))
+        else:
+            self._pause_btn.setText(tr("Resume") if self._recording_controller.is_paused else tr("Pause"))
 
     # --- refresh helpers -------------------------------------------------
 
@@ -950,6 +990,11 @@ class MainWindow(QMainWindow):
 
     def _on_playback_state_changed(self, state):
         self._play_btn.setText(tr("Pause") if state == QMediaPlayer.PlayingState else tr("Play"))
+        if state == QMediaPlayer.StoppedState:
+            # Covers both a file playing to the end and _release_playback_lock_on()
+            # explicitly stopping playback (e.g. right before deleting that file) -
+            # otherwise the progress row was left showing a now-meaningless position.
+            self._playback_row_widget.setVisible(False)
 
     def _update_playback_time_label(self, position_ms, duration_ms):
         pos = core.format_time(position_ms / 1000)

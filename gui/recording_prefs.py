@@ -11,6 +11,26 @@ _USE_SYSTEM_KEY = "recording_use_system"
 _MIC_DEVICE_KEY = "recording_mic_device"
 _LOOPBACK_DEVICE_KEY = "recording_loopback_device"
 _EXCLUSIVE_KEY = "recording_exclusive"
+_DEVICE_PREF_MIGRATED_KEY = "recording_device_pref_migrated_v1"
+
+
+def _migrate_device_prefs_once() -> None:
+    """An earlier build had a live device combo directly in the recording
+    panel, which saved a specific device name under these same two keys as
+    soon as the panel was built - before "System default" existed as a
+    concept to explicitly opt out of. Without this, that leftover value
+    would silently look like a deliberate Settings choice and override
+    "System default" forever, even though the user never chose it through
+    the Settings UI that replaced the panel combo."""
+    settings = QSettings("MeetingScribe", "MeetingScribe")
+    if settings.value(_DEVICE_PREF_MIGRATED_KEY, False, type=bool):
+        return
+    settings.remove(_MIC_DEVICE_KEY)
+    settings.remove(_LOOPBACK_DEVICE_KEY)
+    settings.setValue(_DEVICE_PREF_MIGRATED_KEY, True)
+
+
+_migrate_device_prefs_once()
 
 
 def get_use_microphone() -> bool:

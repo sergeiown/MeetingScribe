@@ -49,20 +49,25 @@ class _ElidedLabel(QLabel):
 
 
 class LevelMeterWidget(QWidget):
-    """Segmented VU-style meter on a dB scale, with peak-hold and a
-    numeric dB readout - a custom paintEvent instead of a QProgressBar,
+    """Vertical, segmented VU-style meter on a dB scale, with peak-hold and
+    a numeric dB readout - a custom paintEvent instead of a QProgressBar,
     whose chunked style and min/max/value semantics fight a clean
-    peak-hold/color-zone/scale look."""
+    peak-hold/color-zone/scale look. Vertical + size-policy Expanding so it
+    fills whatever height the panel around it has free, rather than sitting
+    as a thin fixed-height strip."""
 
     _DECAY = 0.94  # per set_level() call - the meter is driven at ~25fps, so this reads as a fast but visible fall-off
     _SEGMENTS = 28
     _SEGMENT_GAP = 2
     _MIN_DB = -48.0
     _SCALE_MARKS = (-40, -20, -12, -6, -3, 0)
+    _SCALE_TEXT_WIDTH = 26
+    _READOUT_HEIGHT = 14
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(46)
+        self.setMinimumWidth(44)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self._level = 0.0
         self._peak_hold = 0.0
 
@@ -88,14 +93,15 @@ class LevelMeterWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, False)
         rect = self.rect()
-        width = rect.width()
-        bar_top, bar_h = 2, 16
+        bar_w = max(1, rect.width() - self._SCALE_TEXT_WIDTH)
+        bar_top = 0
+        bar_h = max(1, rect.height() - self._READOUT_HEIGHT)
 
-        painter.fillRect(0, bar_top, width, bar_h, QColor("#1e1e1e"))
+        painter.fillRect(0, bar_top, bar_w, bar_h, QColor("#1e1e1e"))
 
         level_frac = self._to_frac(self._level)
         active_segments = round(level_frac * self._SEGMENTS)
-        seg_w = (width - self._SEGMENT_GAP * (self._SEGMENTS - 1)) / self._SEGMENTS
+        seg_h = (bar_h - self._SEGMENT_GAP * (self._SEGMENTS - 1)) / self._SEGMENTS
         for i in range(self._SEGMENTS):
             frac_i = i / self._SEGMENTS
             if frac_i < 0.65:
@@ -104,27 +110,31 @@ class LevelMeterWidget(QWidget):
                 on, off = QColor("#f1c40f"), QColor("#332d17")
             else:
                 on, off = QColor("#e74c3c"), QColor("#331c1a")
-            x = i * (seg_w + self._SEGMENT_GAP)
-            painter.fillRect(int(x), bar_top, max(1, int(seg_w)), bar_h, on if i < active_segments else off)
+            # i=0 is the bottom (quietest) segment - fill upward as level rises.
+            y = bar_top + bar_h - (i + 1) * (seg_h + self._SEGMENT_GAP) + self._SEGMENT_GAP
+            painter.fillRect(0, int(y), bar_w, max(1, int(seg_h)), on if i < active_segments else off)
 
         peak_frac = self._to_frac(self._peak_hold)
-        peak_x = int(peak_frac * width)
-        if peak_x > 1:
-            painter.fillRect(min(peak_x, width - 2), bar_top, 2, bar_h, QColor("#ffffff"))
+        if peak_frac > 0:
+            peak_y = bar_top + bar_h - int(peak_frac * bar_h)
+            painter.fillRect(0, max(bar_top, peak_y - 1), bar_w, 2, QColor("#ffffff"))
 
         painter.setPen(QColor("#888888"))
         font = painter.font()
         font.setPointSize(7)
         painter.setFont(font)
-        scale_y = bar_top + bar_h + 2
         for mark_db in self._SCALE_MARKS:
             f = (mark_db - self._MIN_DB) / (0.0 - self._MIN_DB)
-            x = int(f * width)
-            painter.drawText(max(0, x - 12), scale_y, 24, 12, Qt.AlignCenter, str(mark_db))
+            y = bar_top + bar_h - int(f * bar_h)
+            painter.drawText(bar_w + 3, y - 6, self._SCALE_TEXT_WIDTH - 3, 12,
+                              Qt.AlignVCenter | Qt.AlignLeft, str(mark_db))
 
+        # Below the bar, clearly separated from the "0" scale mark at the
+        # top - level with it read as if it were (mis)labeling that mark.
         peak_db = self._MIN_DB if self._peak_hold <= 0 else max(self._MIN_DB, 20.0 * math.log10(self._peak_hold))
         painter.setPen(QColor("#cccccc"))
-        painter.drawText(0, scale_y + 12, width, 12, Qt.AlignRight, f"{peak_db:.0f} dB")
+        painter.drawText(0, bar_h + 2, rect.width(), self._READOUT_HEIGHT, Qt.AlignCenter,
+                          tr("Peak: {db} dB", db=f"{peak_db:.0f}"))
         painter.end()
 
 

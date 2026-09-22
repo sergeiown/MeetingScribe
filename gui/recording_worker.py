@@ -38,6 +38,16 @@ class RecordingController(QObject):
         path = self._recorder.stop()
         self.stopped.emit(str(path))
 
+    def pause(self) -> None:
+        self._recorder.pause()
+
+    def resume(self) -> None:
+        self._recorder.resume()
+
+    @property
+    def is_paused(self) -> bool:
+        return self._recorder.is_paused
+
     def elapsed_seconds(self) -> float:
         return self._recorder.elapsed_seconds()
 

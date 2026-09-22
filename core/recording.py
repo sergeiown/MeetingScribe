@@ -253,6 +253,8 @@ class Recorder:
         self._mix_thread = None
         self._stop_flag = threading.Event()
         self._start_time = None
+        self._paused_since = None
+        self._paused_accum = 0.0
 
     def start(self) -> None:
         channels = max(1, min(max(d.channels for d, _ in self._device_specs), 2))
@@ -321,7 +323,29 @@ class Recorder:
             self._mix_and_write([src.drain() for src in self._sources])
         self._mix_and_write([src.drain() for src in self._sources])  # final drain since the last tick
 
+    def pause(self) -> None:
+        """Keeps the underlying streams open (avoids re-opening an exclusive
+        device, and re-running the rate calibration) - just stops writing
+        audio to the file and freezes the elapsed-time counter."""
+        if self._paused_since is None:
+            self._paused_since = time.monotonic()
+
+    def resume(self) -> None:
+        if self._paused_since is not None:
+            self._paused_accum += time.monotonic() - self._paused_since
+            self._paused_since = None
+
+    @property
+    def is_paused(self) -> bool:
+        return self._paused_since is not None
+
     def _mix_and_write(self, blocks):
+        if self._paused_since is not None:
+            # Still drained (by the caller) so the source queues don't grow
+            # unbounded while paused - just not written or metered as audio.
+            self._events.put(("levels", [0.0] * len(blocks)))
+            return
+
         # Per-source peaks, computed before mixing, so the GUI can show one
         # meter per active source (mic + system) instead of one blended number.
         per_source_peaks = [float(np.abs(b).max()) if b.size else 0.0 for b in blocks]
@@ -353,7 +377,11 @@ class Recorder:
         return events
 
     def elapsed_seconds(self) -> float:
-        return time.monotonic() - self._start_time if self._start_time else 0.0
+        if not self._start_time:
+            return 0.0
+        now = time.monotonic()
+        paused = self._paused_accum + (now - self._paused_since if self._paused_since is not None else 0.0)
+        return max(0.0, now - self._start_time - paused)
 
     def stop(self) -> Path:
         self._stop_flag.set()

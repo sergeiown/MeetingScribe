@@ -307,6 +307,7 @@ _UK = {
     "System audio": "Системний звук",
     "Microphone level": "Рівень мікрофона",
     "System audio level": "Рівень системного звуку",
+    "Peak: {db} dB": "Пік: {db} дБ",
     "Record": "Запис",
     "Recording failed": "Помилка запису",
     "No microphone available.": "Немає доступного мікрофона.",
@@ -319,6 +320,7 @@ _UK = {
         "Деякі файли не вдалося видалити:\n\n{errors}",
     "Play": "Відтворити",
     "Pause": "Пауза",
+    "Resume": "Продовжити",
     "Stop": "Стоп",
 }
 
