@@ -16,7 +16,7 @@ _POLL_MS = 40  # faster than the 100ms ML-progress poll - a level meter needs to
 
 
 class RecordingController(QObject):
-    level = Signal(float)   # 0.0-1.0 peak
+    levels = Signal(list)   # [peak, ...] - one 0.0-1.0 peak per active source
     error = Signal(str)     # RecordingError message, or an unexpected mid-recording stop
     stopped = Signal(str)   # final file path, once stop() completes
 
@@ -43,7 +43,7 @@ class RecordingController(QObject):
 
     def _drain(self):
         for kind, payload in self._recorder.drain_events():
-            if kind == "level":
-                self.level.emit(payload)
+            if kind == "levels":
+                self.levels.emit(payload)
             elif kind == "error":
                 self.error.emit(payload)

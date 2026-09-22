@@ -1,5 +1,6 @@
 """Small reusable widgets."""
 
+import math
 import time
 
 import core
@@ -48,16 +49,20 @@ class _ElidedLabel(QLabel):
 
 
 class LevelMeterWidget(QWidget):
-    """Horizontal peak-level bar with green/yellow/red zones and a briefly
-    held peak tick. A custom paintEvent instead of a QProgressBar: a
-    progress bar's chunked style and min/max/value semantics fight a clean
-    peak-hold/color-zone look; a bare paintEvent is simpler and correct."""
+    """Segmented VU-style meter on a dB scale, with peak-hold and a
+    numeric dB readout - a custom paintEvent instead of a QProgressBar,
+    whose chunked style and min/max/value semantics fight a clean
+    peak-hold/color-zone/scale look."""
 
     _DECAY = 0.94  # per set_level() call - the meter is driven at ~25fps, so this reads as a fast but visible fall-off
+    _SEGMENTS = 28
+    _SEGMENT_GAP = 2
+    _MIN_DB = -48.0
+    _SCALE_MARKS = (-40, -20, -12, -6, -3, 0)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(18)
+        self.setFixedHeight(46)
         self._level = 0.0
         self._peak_hold = 0.0
 
@@ -71,30 +76,55 @@ class LevelMeterWidget(QWidget):
         self._peak_hold = 0.0
         self.update()
 
+    def _to_frac(self, level: float) -> float:
+        """Linear amplitude (0..1) -> position (0..1) on the dB scale."""
+        if level <= 0:
+            db = self._MIN_DB
+        else:
+            db = max(self._MIN_DB, 20.0 * math.log10(level))
+        return (db - self._MIN_DB) / (0.0 - self._MIN_DB)
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, False)
         rect = self.rect()
-        painter.fillRect(rect, QColor("#1e1e1e"))
-
         width = rect.width()
-        level_px = int(width * self._level)
-        if level_px > 0:
-            green_end = int(width * 0.7)
-            yellow_end = int(width * 0.9)
-            if level_px <= green_end:
-                painter.fillRect(0, 0, level_px, rect.height(), QColor("#2ecc71"))
-            elif level_px <= yellow_end:
-                painter.fillRect(0, 0, green_end, rect.height(), QColor("#2ecc71"))
-                painter.fillRect(green_end, 0, level_px - green_end, rect.height(), QColor("#f1c40f"))
-            else:
-                painter.fillRect(0, 0, green_end, rect.height(), QColor("#2ecc71"))
-                painter.fillRect(green_end, 0, yellow_end - green_end, rect.height(), QColor("#f1c40f"))
-                painter.fillRect(yellow_end, 0, level_px - yellow_end, rect.height(), QColor("#e74c3c"))
+        bar_top, bar_h = 2, 16
 
-        peak_px = int(width * self._peak_hold)
-        if peak_px > 1:
-            painter.fillRect(peak_px - 2, 0, 2, rect.height(), QColor("#ffffff"))
+        painter.fillRect(0, bar_top, width, bar_h, QColor("#1e1e1e"))
+
+        level_frac = self._to_frac(self._level)
+        active_segments = round(level_frac * self._SEGMENTS)
+        seg_w = (width - self._SEGMENT_GAP * (self._SEGMENTS - 1)) / self._SEGMENTS
+        for i in range(self._SEGMENTS):
+            frac_i = i / self._SEGMENTS
+            if frac_i < 0.65:
+                on, off = QColor("#2ecc71"), QColor("#21301f")
+            elif frac_i < 0.85:
+                on, off = QColor("#f1c40f"), QColor("#332d17")
+            else:
+                on, off = QColor("#e74c3c"), QColor("#331c1a")
+            x = i * (seg_w + self._SEGMENT_GAP)
+            painter.fillRect(int(x), bar_top, max(1, int(seg_w)), bar_h, on if i < active_segments else off)
+
+        peak_frac = self._to_frac(self._peak_hold)
+        peak_x = int(peak_frac * width)
+        if peak_x > 1:
+            painter.fillRect(min(peak_x, width - 2), bar_top, 2, bar_h, QColor("#ffffff"))
+
+        painter.setPen(QColor("#888888"))
+        font = painter.font()
+        font.setPointSize(7)
+        painter.setFont(font)
+        scale_y = bar_top + bar_h + 2
+        for mark_db in self._SCALE_MARKS:
+            f = (mark_db - self._MIN_DB) / (0.0 - self._MIN_DB)
+            x = int(f * width)
+            painter.drawText(max(0, x - 12), scale_y, 24, 12, Qt.AlignCenter, str(mark_db))
+
+        peak_db = self._MIN_DB if self._peak_hold <= 0 else max(self._MIN_DB, 20.0 * math.log10(self._peak_hold))
+        painter.setPen(QColor("#cccccc"))
+        painter.drawText(0, scale_y + 12, width, 12, Qt.AlignRight, f"{peak_db:.0f} dB")
         painter.end()
 
 

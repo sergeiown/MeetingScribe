@@ -20,9 +20,9 @@ from PySide6.QtWidgets import (
 from .device_prefs import get_device_preference
 from .i18n import tr, get_language
 from .recording_prefs import (
-    get_recording_source, set_recording_source,
-    get_last_mic_device_name, set_last_mic_device_name,
-    get_last_loopback_device_name, set_last_loopback_device_name,
+    get_use_microphone, set_use_microphone,
+    get_use_system_audio, set_use_system_audio,
+    get_mic_device_name, get_loopback_device_name,
     get_exclusive_default,
 )
 from .recording_worker import RecordingController
@@ -147,6 +147,9 @@ class MainWindow(QMainWindow):
         self._help_btn.setText(tr("Help"))
         self._help_btn.setAutoRaise(True)
         self._help_btn.setPopupMode(QToolButton.InstantPopup)
+        # No dropdown-arrow indicator - a small stray glyph that added
+        # visual noise without adding information the click itself doesn't.
+        self._help_btn.setStyleSheet("QToolButton::menu-indicator { image: none; width: 0px; }")
         self._help_menu = QMenu(self._help_btn)
         self._how_to_use_action = self._help_menu.addAction(tr("How to use"))
         self._how_to_use_action.triggered.connect(self._show_how_to_use)
@@ -176,22 +179,27 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(self._record_box)
         layout.setSpacing(10)
 
-        self._record_source_label = QLabel(tr("Source:"))
-        layout.addWidget(self._record_source_label)
-        self._record_source_combo = QComboBox()
-        self._record_source_combo.addItem(tr("Microphone"), "microphone")
-        self._record_source_combo.addItem(tr("System audio"), "system")
-        self._record_source_combo.addItem(tr("Microphone + System audio"), "both")
-        self._record_source_combo.currentIndexChanged.connect(self._on_record_source_changed)
-        layout.addWidget(self._record_source_combo)
+        self._mic_checkbox = QCheckBox(tr("Microphone"))
+        self._mic_checkbox.setChecked(get_use_microphone())
+        self._mic_checkbox.toggled.connect(self._on_mic_checkbox_toggled)
+        layout.addWidget(self._mic_checkbox)
 
-        self._record_device_label = QLabel(tr("Device:"))
-        layout.addWidget(self._record_device_label)
-        self._record_device_combo = QComboBox()
-        layout.addWidget(self._record_device_combo)
+        self._mic_meter_label = QLabel()
+        self._mic_meter_label.setProperty("hint", True)
+        layout.addWidget(self._mic_meter_label)
+        self._mic_meter = LevelMeterWidget()
+        layout.addWidget(self._mic_meter)
 
-        self._level_meter = LevelMeterWidget()
-        layout.addWidget(self._level_meter)
+        self._system_checkbox = QCheckBox(tr("System audio"))
+        self._system_checkbox.setChecked(get_use_system_audio())
+        self._system_checkbox.toggled.connect(self._on_system_checkbox_toggled)
+        layout.addWidget(self._system_checkbox)
+
+        self._system_meter_label = QLabel()
+        self._system_meter_label.setProperty("hint", True)
+        layout.addWidget(self._system_meter_label)
+        self._system_meter = LevelMeterWidget()
+        layout.addWidget(self._system_meter)
 
         self._record_elapsed_label = QLabel("00:00")
         self._record_elapsed_label.setProperty("hint", True)
@@ -206,54 +214,31 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         outer.addWidget(self._record_box)
 
-        idx = self._record_source_combo.findData(get_recording_source())
-        self._record_source_combo.setCurrentIndex(idx if idx >= 0 else 0)
-        self._on_record_source_changed(self._record_source_combo.currentIndex())
-
+        self._update_source_meter_visibility()
         return panel
 
-    def _current_record_source(self):
-        return self._record_source_combo.currentData()
-
-    def _on_record_source_changed(self, _index):
-        source = self._current_record_source()
-        set_recording_source(source)
-        # "both" still shows a device combo, but it's for the microphone
-        # half only - the system-audio half silently uses the current
-        # default loopback device (most machines have exactly one output
-        # device anyway, and a second device picker isn't worth the extra
-        # UI for this).
-        is_mic_combo = source in ("microphone", "both")
-
-        self._record_device_combo.clear()
-        self._recording_devices = core.list_microphones() if is_mic_combo else core.list_loopback_outputs()
-        last_name = get_last_mic_device_name() if is_mic_combo else get_last_loopback_device_name()
-        for d in self._recording_devices:
-            self._record_device_combo.addItem(d.name, d.name)
-        select_idx = self._record_device_combo.findData(last_name) if last_name else -1
-        if select_idx < 0:
-            select_idx = next((i for i, d in enumerate(self._recording_devices) if d.is_default), 0)
-        if self._record_device_combo.count():
-            self._record_device_combo.setCurrentIndex(max(select_idx, 0))
-        self._record_device_combo.currentIndexChanged.connect(
-            self._on_record_device_changed, Qt.UniqueConnection)
-
-    def _on_record_device_changed(self, _index):
-        name = self._record_device_combo.currentData()
-        if not name:
+    def _on_mic_checkbox_toggled(self, checked):
+        if not checked and not self._system_checkbox.isChecked():
+            # At least one source must stay selected - revert silently.
+            self._mic_checkbox.setChecked(True)
             return
-        if self._current_record_source() in ("microphone", "both"):
-            set_last_mic_device_name(name)
-        else:
-            set_last_loopback_device_name(name)
+        set_use_microphone(checked)
+        self._update_source_meter_visibility()
 
-    def _selected_record_device(self):
-        name = self._record_device_combo.currentData()
-        return next((d for d in self._recording_devices if d.name == name), None)
+    def _on_system_checkbox_toggled(self, checked):
+        if not checked and not self._mic_checkbox.isChecked():
+            self._system_checkbox.setChecked(True)
+            return
+        set_use_system_audio(checked)
+        self._update_source_meter_visibility()
 
-    def _default_loopback_device(self):
-        devices = core.list_loopback_outputs()
-        return next((d for d in devices if d.is_default), devices[0] if devices else None)
+    def _update_source_meter_visibility(self):
+        self._mic_meter_label.setVisible(self._mic_checkbox.isChecked())
+        self._mic_meter.setVisible(self._mic_checkbox.isChecked())
+        self._system_meter_label.setVisible(self._system_checkbox.isChecked())
+        self._system_meter.setVisible(self._system_checkbox.isChecked())
+        self._mic_meter_label.setText(tr("Microphone level"))
+        self._system_meter_label.setText(tr("System audio level"))
 
     def _on_record_clicked(self):
         if self._recording_controller is None:
@@ -262,27 +247,28 @@ class MainWindow(QMainWindow):
             self._stop_recording()
 
     def _start_recording(self):
-        source = self._current_record_source()
-        device = self._selected_record_device()
-        if device is None:
-            QMessageBox.information(self, tr("Record"), tr("No recording device available."))
-            return
+        use_mic = self._mic_checkbox.isChecked()
+        use_system = self._system_checkbox.isChecked()
 
-        devices = [(device, False)]  # (AudioDevice, is_loopback)
-        if source == "system":
-            devices = [(device, True)]
-        elif source == "both":
-            loopback_device = self._default_loopback_device()
-            if loopback_device is None:
-                QMessageBox.information(self, tr("Record"), tr("No recording device available."))
+        devices = []  # [(AudioDevice, is_loopback), ...], mic first so level events map 1:1 with the meters
+        if use_mic:
+            mic = core.resolve_device(core.list_microphones(), get_mic_device_name())
+            if mic is None:
+                QMessageBox.information(self, tr("Record"), tr("No microphone available."))
                 return
-            devices.append((loopback_device, True))
+            devices.append((mic, False))
+        if use_system:
+            speaker = core.resolve_device(core.list_loopback_outputs(), get_loopback_device_name())
+            if speaker is None:
+                QMessageBox.information(self, tr("Record"), tr("No system-audio output device available."))
+                return
+            devices.append((speaker, True))
 
         core.ensure_workdirs()
         out_path = core.INPUT_DIR / f"Recording {datetime.now():%Y-%m-%d %H-%M-%S}.wav"
 
         controller = RecordingController(devices, out_path, exclusive=get_exclusive_default())
-        controller.level.connect(self._level_meter.set_level)
+        controller.levels.connect(self._on_recording_levels)
         controller.error.connect(self._on_recording_error)
         controller.stopped.connect(self._on_recording_stopped)
         try:
@@ -294,13 +280,23 @@ class MainWindow(QMainWindow):
         self._recording_controller = controller
         self._elapsed_timer.start(500)
         self._record_btn.setText(tr("Stop"))
-        self._record_source_combo.setEnabled(False)
-        self._record_device_combo.setEnabled(False)
+        self._mic_checkbox.setEnabled(False)
+        self._system_checkbox.setEnabled(False)
 
     def _stop_recording(self):
         if self._recording_controller is None:
             return
         self._recording_controller.stop()
+
+    def _on_recording_levels(self, levels):
+        # Order matches _start_recording's devices list: mic first, then system.
+        meters = []
+        if self._mic_checkbox.isChecked():
+            meters.append(self._mic_meter)
+        if self._system_checkbox.isChecked():
+            meters.append(self._system_meter)
+        for meter, level in zip(meters, levels):
+            meter.set_level(level)
 
     def _on_recording_error(self, message):
         QMessageBox.warning(self, tr("Recording"), message)
@@ -309,12 +305,12 @@ class MainWindow(QMainWindow):
     def _on_recording_stopped(self, path_str):
         self._recording_controller = None
         self._elapsed_timer.stop()
-        self._level_meter.reset()
+        self._mic_meter.reset()
+        self._system_meter.reset()
         self._record_elapsed_label.setText("00:00")
         self._record_btn.setText(tr("Record"))
-        self._record_source_combo.setEnabled(True)
-        self._record_device_combo.setEnabled(True)
-        self._on_record_source_changed(self._record_source_combo.currentIndex())
+        self._mic_checkbox.setEnabled(True)
+        self._system_checkbox.setEnabled(True)
         self._refresh_file_list(select_all=False)
         self._select_file_by_path(Path(path_str))
 
@@ -558,11 +554,10 @@ class MainWindow(QMainWindow):
         self._open_output_btn.setText(tr("Open output folder"))
 
         self._record_box.setTitle(tr("Record audio"))
-        self._record_source_label.setText(tr("Source:"))
-        self._record_device_label.setText(tr("Device:"))
-        self._record_source_combo.setItemText(0, tr("Microphone"))
-        self._record_source_combo.setItemText(1, tr("System audio"))
-        self._record_source_combo.setItemText(2, tr("Microphone + System audio"))
+        self._mic_checkbox.setText(tr("Microphone"))
+        self._system_checkbox.setText(tr("System audio"))
+        self._mic_meter_label.setText(tr("Microphone level"))
+        self._system_meter_label.setText(tr("System audio level"))
         if self._recording_controller is None:
             self._record_btn.setText(tr("Record"))
 
@@ -894,8 +889,16 @@ class MainWindow(QMainWindow):
             tr("Delete {n} file(s) from input\\? This cannot be undone.\n\n{names}", n=len(files), names=names))
         if ans != QMessageBox.Yes:
             return
+        failed = []
         for f in files:
-            f.unlink(missing_ok=True)
+            self._release_playback_lock_on(f)
+            try:
+                f.unlink(missing_ok=True)
+            except OSError as e:
+                failed.append(f"{f.name}: {e}")
+        if failed:
+            QMessageBox.warning(self, tr("Delete files"),
+                                 tr("Some files could not be deleted:\n\n{errors}", errors="\n".join(failed)))
         self._refresh_file_list()
 
     # --- playback ------------------------------------------------------
@@ -923,6 +926,15 @@ class MainWindow(QMainWindow):
         self._media_player.setSource(QUrl.fromLocalFile(str(path)))
         self._media_player.play()
         self._playback_row_widget.setVisible(True)
+
+    def _release_playback_lock_on(self, path: Path):
+        """Qt's media backend keeps an OS-level handle open on the currently
+        loaded file - without releasing it first, deleting (or re-recording
+        over) that same file fails with PermissionError/WinError 32
+        (confirmed by direct testing while the file was mid-playback)."""
+        if self._media_player.source() == QUrl.fromLocalFile(str(path)):
+            self._media_player.stop()
+            self._media_player.setSource(QUrl())
 
     def _on_playback_position_changed(self, position_ms):
         if not self._playback_slider.isSliderDown():

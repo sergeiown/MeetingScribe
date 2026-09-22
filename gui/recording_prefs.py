@@ -1,40 +1,50 @@
-"""Recording-panel preferences (source, last-used device name, exclusive-mode
-default), stored like device_prefs.py. Device *name* is persisted, not a
-numeric index - indices aren't stable across reboots or when USB audio
-devices are plugged in a different order."""
+"""Recording preferences (which sources are active, device choice, exclusive
+mode default), stored like device_prefs.py. Device *name* is persisted, not
+a numeric index - indices aren't stable across reboots or when USB audio
+devices are plugged in a different order. A device name of None/"" means
+"system default", resolved fresh at recording time rather than pinned."""
 
 from PySide6.QtCore import QSettings
 
-_SOURCE_KEY = "recording_source"
+_USE_MIC_KEY = "recording_use_mic"
+_USE_SYSTEM_KEY = "recording_use_system"
 _MIC_DEVICE_KEY = "recording_mic_device"
 _LOOPBACK_DEVICE_KEY = "recording_loopback_device"
 _EXCLUSIVE_KEY = "recording_exclusive"
 
-DEFAULT_SOURCE = "microphone"  # "microphone" | "system"
+
+def get_use_microphone() -> bool:
+    return QSettings("MeetingScribe", "MeetingScribe").value(_USE_MIC_KEY, True, type=bool)
 
 
-def get_recording_source() -> str:
-    return QSettings("MeetingScribe", "MeetingScribe").value(_SOURCE_KEY, DEFAULT_SOURCE)
+def set_use_microphone(value: bool) -> None:
+    QSettings("MeetingScribe", "MeetingScribe").setValue(_USE_MIC_KEY, value)
 
 
-def set_recording_source(value: str) -> None:
-    QSettings("MeetingScribe", "MeetingScribe").setValue(_SOURCE_KEY, value)
+def get_use_system_audio() -> bool:
+    return QSettings("MeetingScribe", "MeetingScribe").value(_USE_SYSTEM_KEY, False, type=bool)
 
 
-def get_last_mic_device_name():
-    return QSettings("MeetingScribe", "MeetingScribe").value(_MIC_DEVICE_KEY, None)
+def set_use_system_audio(value: bool) -> None:
+    QSettings("MeetingScribe", "MeetingScribe").setValue(_USE_SYSTEM_KEY, value)
 
 
-def set_last_mic_device_name(name: str) -> None:
-    QSettings("MeetingScribe", "MeetingScribe").setValue(_MIC_DEVICE_KEY, name)
+def get_mic_device_name():
+    """None means "system default"."""
+    return QSettings("MeetingScribe", "MeetingScribe").value(_MIC_DEVICE_KEY, None) or None
 
 
-def get_last_loopback_device_name():
-    return QSettings("MeetingScribe", "MeetingScribe").value(_LOOPBACK_DEVICE_KEY, None)
+def set_mic_device_name(name) -> None:
+    QSettings("MeetingScribe", "MeetingScribe").setValue(_MIC_DEVICE_KEY, name or "")
 
 
-def set_last_loopback_device_name(name: str) -> None:
-    QSettings("MeetingScribe", "MeetingScribe").setValue(_LOOPBACK_DEVICE_KEY, name)
+def get_loopback_device_name():
+    """None means "system default"."""
+    return QSettings("MeetingScribe", "MeetingScribe").value(_LOOPBACK_DEVICE_KEY, None) or None
+
+
+def set_loopback_device_name(name) -> None:
+    QSettings("MeetingScribe", "MeetingScribe").setValue(_LOOPBACK_DEVICE_KEY, name or "")
 
 
 def get_exclusive_default() -> bool:

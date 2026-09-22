@@ -15,7 +15,11 @@ from PySide6.QtWidgets import (
 from .device_prefs import get_device_preference, set_device_preference
 from .hardware_icons import cpu_icon_path, gpu_icon_path
 from .i18n import tr, available_languages, get_language, set_language
-from .recording_prefs import get_exclusive_default, set_exclusive_default
+from .recording_prefs import (
+    get_exclusive_default, set_exclusive_default,
+    get_mic_device_name, set_mic_device_name,
+    get_loopback_device_name, set_loopback_device_name,
+)
 from .style import (
     apply_theme, get_theme_preference, set_theme_preference,
     get_show_splash_preference, set_show_splash_preference,
@@ -401,6 +405,35 @@ class GeneralTab(QWidget):
     def _build_recording_box(self):
         box = QGroupBox(tr("Recording"))
         box_layout = QVBoxLayout(box)
+        box_layout.setSpacing(14)
+
+        mic_block = QVBoxLayout()
+        mic_block.setSpacing(8)
+        mic_block.addWidget(QLabel(tr("Microphone device:")))
+        self._mic_device_combo = QComboBox()
+        self._mic_device_combo.addItem(tr("System default"), None)
+        for d in core.list_microphones():
+            self._mic_device_combo.addItem(d.name, d.name)
+        idx = self._mic_device_combo.findData(get_mic_device_name())
+        self._mic_device_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._mic_device_combo.currentIndexChanged.connect(
+            lambda _i: set_mic_device_name(self._mic_device_combo.currentData()))
+        mic_block.addWidget(self._mic_device_combo)
+        box_layout.addLayout(mic_block)
+
+        loopback_block = QVBoxLayout()
+        loopback_block.setSpacing(8)
+        loopback_block.addWidget(QLabel(tr("System audio device:")))
+        self._loopback_device_combo = QComboBox()
+        self._loopback_device_combo.addItem(tr("System default"), None)
+        for d in core.list_loopback_outputs():
+            self._loopback_device_combo.addItem(d.name, d.name)
+        idx = self._loopback_device_combo.findData(get_loopback_device_name())
+        self._loopback_device_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._loopback_device_combo.currentIndexChanged.connect(
+            lambda _i: set_loopback_device_name(self._loopback_device_combo.currentData()))
+        loopback_block.addWidget(self._loopback_device_combo)
+        box_layout.addLayout(loopback_block)
 
         self._exclusive_checkbox = QCheckBox(tr("Exclusive mode for microphone recording"))
         self._exclusive_checkbox.setChecked(get_exclusive_default())

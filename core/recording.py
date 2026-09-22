@@ -107,6 +107,18 @@ def list_loopback_outputs() -> list:
     return devices
 
 
+def resolve_device(devices: list, preferred_name):
+    """Picks preferred_name from devices if it's still present, else the
+    current OS-default device, else the first available (or None if the
+    list is empty). preferred_name=None means "use the system default",
+    resolved fresh against the live device list rather than a pinned name."""
+    if preferred_name:
+        match = next((d for d in devices if d.name == preferred_name), None)
+        if match is not None:
+            return match
+    return next((d for d in devices if d.is_default), devices[0] if devices else None)
+
+
 class _SourceStream:
     """One live capture source (microphone or loopback), pushing raw
     float32 blocks into its own queue - mixing/writing happens outside,
@@ -244,18 +256,10 @@ class Recorder:
 
     def start(self) -> None:
         channels = max(1, min(max(d.channels for d, _ in self._device_specs), 2))
-        samplerate = int(self._device_specs[0][0].default_samplerate) or 48000
-
-        try:
-            self._wav = wave.open(str(self._out_path), "wb")
-            self._wav.setnchannels(channels)
-            self._wav.setsampwidth(2)
-            self._wav.setframerate(samplerate)
-        except OSError as e:
-            raise RecordingError(f"Could not create the recording file: {e}") from e
+        requested_samplerate = int(self._device_specs[0][0].default_samplerate) or 48000
 
         self._sources = [
-            _SourceStream(device, loopback, self._exclusive, channels, samplerate,
+            _SourceStream(device, loopback, self._exclusive, channels, requested_samplerate,
                           on_error=lambda msg: self._events.put(("error", msg)))
             for device, loopback in self._device_specs
         ]
@@ -268,8 +272,43 @@ class Recorder:
             for src in started:
                 src.stop()
             self._sources = []
-            self._close_wav()
             raise
+
+        # Calibrate rather than trust the requested/reported rate: on some
+        # real devices, WASAPI silently delivers audio at a different actual
+        # throughput than what was requested (confirmed by direct testing -
+        # a "48000 Hz" exclusive-mode stream measured at ~70 kHz actual
+        # throughput on one real device, shared mode at ~43 kHz on the same
+        # device). Labeling the WAV with the wrong rate doesn't lose or
+        # corrupt any audio, but it plays back badly pitch-shifted - which
+        # is exactly what sounds like "crackling"/garbled speech. Measuring
+        # actual throughput over a short wall-clock window and using that
+        # for the file header fixes this regardless of what the device or
+        # driver actually does under the hood.
+        calib_window = 0.35
+        calib_t0 = time.monotonic()
+        time.sleep(calib_window)
+        calib_elapsed = time.monotonic() - calib_t0
+        calib_blocks = [src.drain() for src in self._sources]
+        primary_frames = calib_blocks[0].shape[0]
+        measured_rate = int(round(primary_frames / calib_elapsed)) if primary_frames else requested_samplerate
+        if not (8000 <= measured_rate <= 192000):
+            # Implausible (e.g. near-total silence during calibration) -
+            # fall back rather than write a nonsense framerate.
+            measured_rate = requested_samplerate
+
+        try:
+            self._wav = wave.open(str(self._out_path), "wb")
+            self._wav.setnchannels(channels)
+            self._wav.setsampwidth(2)
+            self._wav.setframerate(measured_rate)
+        except OSError as e:
+            for src in self._sources:
+                src.stop()
+            self._sources = []
+            raise RecordingError(f"Could not create the recording file: {e}") from e
+
+        self._mix_and_write(calib_blocks)  # don't lose the calibration-window audio
 
         self._start_time = time.monotonic()
         self._stop_flag.clear()
@@ -279,11 +318,13 @@ class Recorder:
     def _mix_loop(self):
         while not self._stop_flag.is_set():
             time.sleep(_CHUNK_SECONDS)
-            self._mix_and_write()
-        self._mix_and_write()  # final drain of whatever arrived since the last tick
+            self._mix_and_write([src.drain() for src in self._sources])
+        self._mix_and_write([src.drain() for src in self._sources])  # final drain since the last tick
 
-    def _mix_and_write(self):
-        blocks = [src.drain() for src in self._sources]
+    def _mix_and_write(self, blocks):
+        # Per-source peaks, computed before mixing, so the GUI can show one
+        # meter per active source (mic + system) instead of one blended number.
+        per_source_peaks = [float(np.abs(b).max()) if b.size else 0.0 for b in blocks]
         if len(blocks) == 1:
             mixed = blocks[0]
         else:
@@ -292,19 +333,17 @@ class Recorder:
                 mixed = np.zeros((0, blocks[0].shape[1]), dtype=np.float32)
             else:
                 mixed = sum(b[:n] * _MIX_GAIN for b in blocks)
-        if mixed.size == 0:
-            return
-        peak = float(np.abs(mixed).max())
-        pcm16 = np.clip(mixed * 32767.0, -32768, 32767).astype(np.int16)
-        if self._wav is not None:
-            try:
-                self._wav.writeframes(pcm16.tobytes())
-            except Exception:
-                pass  # already closed by stop()
-        self._events.put(("level", peak))
+        if mixed.size:
+            pcm16 = np.clip(mixed * 32767.0, -32768, 32767).astype(np.int16)
+            if self._wav is not None:
+                try:
+                    self._wav.writeframes(pcm16.tobytes())
+                except Exception:
+                    pass  # already closed by stop()
+        self._events.put(("levels", per_source_peaks))
 
     def drain_events(self) -> list:
-        """[("level", float) | ("error", str), ...] accumulated since the last call."""
+        """[("levels", [peak, ...]) | ("error", str), ...] accumulated since the last call."""
         events = []
         try:
             while True:

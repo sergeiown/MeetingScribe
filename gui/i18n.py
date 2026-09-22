@@ -213,6 +213,9 @@ _UK = {
     "Show a splash screen on startup": "Показувати заставку при запуску",
     "Prevent the system from sleeping while running": "Не давати системі переходити в сон під час роботи",
     "Recording": "Запис",
+    "Microphone device:": "Пристрій мікрофона:",
+    "System audio device:": "Пристрій системного звуку:",
+    "System default": "За замовчуванням у системі",
     "Exclusive mode for microphone recording": "Ексклюзивний режим для запису з мікрофона",
     "Blocks other apps from using the microphone while recording. "
     "Only applies to the microphone - system-audio capture is always shared.":
@@ -300,18 +303,20 @@ _UK = {
 
     # recording panel + playback (main_window.py)
     "Record audio": "Запис аудіо",
-    "Source:": "Джерело:",
     "Microphone": "Мікрофон",
     "System audio": "Системний звук",
-    "Microphone + System audio": "Мікрофон + системний звук",
-    "Device:": "Пристрій:",
+    "Microphone level": "Рівень мікрофона",
+    "System audio level": "Рівень системного звуку",
     "Record": "Запис",
     "Recording failed": "Помилка запису",
-    "No recording device available.": "Немає доступного пристрою запису.",
+    "No microphone available.": "Немає доступного мікрофона.",
+    "No system-audio output device available.": "Немає доступного пристрою для запису системного звуку.",
     "Recording": "Запис",
     "Recording in progress": "Триває запис",
     "A recording is still running. Stop it and quit?":
         "Запис ще триває. Зупинити його і вийти?",
+    "Some files could not be deleted:\n\n{errors}":
+        "Деякі файли не вдалося видалити:\n\n{errors}",
     "Play": "Відтворити",
     "Pause": "Пауза",
     "Stop": "Стоп",
