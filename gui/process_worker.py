@@ -75,6 +75,7 @@ def run_transcription_process(files, model_size, language, auto_diarize, hf_toke
                 tmp_dir = result.tmp_dir
                 text = result.text
                 diarized = False
+                diar_error_msg = None
 
                 if auto_diarize and hf_token:
                     try:
@@ -84,11 +85,17 @@ def run_transcription_process(files, model_size, language, auto_diarize, hf_toke
                     except core.Cancelled:
                         raise
                     except Exception as de:
-                        on_status(_diarization_error_message(de))
+                        diar_error_msg = _diarization_error_message(de)
 
                 out = core.save_result(f, text)
                 core.save_segments(f, result.segments, diarized=diarized)
                 progress_q.put(("file_done", f.name, str(out)))
+                # Sent *after* file_done, not via on_status before it: the GUI
+                # wipes/replaces its live status trail with the clean saved
+                # transcript as soon as file_done arrives, which would erase
+                # this message unseen if it came any earlier.
+                if diar_error_msg:
+                    on_status(diar_error_msg)
             except core.Cancelled:
                 progress_q.put(("cancelled",))
                 return
