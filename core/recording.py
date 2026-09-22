@@ -63,7 +63,8 @@ import numpy as np
 
 _log = logging.getLogger(__name__)
 
-_CHUNK_SECONDS = 0.05  # loopback pull size, mix-tick interval, and a reasonable meter update grain
+_CHUNK_SECONDS = 0.05  # mix-tick interval and meter update grain
+_LOOPBACK_PULL_SECONDS = 0.005  # see _start_loopback docstring note below
 _MIX_GAIN = 0.7  # per source when mixing two, so simultaneous loud sources don't clip
 
 
@@ -125,23 +126,31 @@ def list_loopback_outputs() -> list:
     return devices
 
 
-def _resample_to(block: np.ndarray, target_frames: int) -> np.ndarray:
-    """Linearly resamples `block` (frames, channels) to exactly
-    target_frames - used to conform one tick's worth of captured audio to
-    however many frames its real, wall-clock-measured duration implies at
-    the declared output rate, regardless of how many raw frames the device
-    actually delivered for that tick (see module docstring)."""
+def _resample_window(block: np.ndarray, raw_start: float, raw_end: float,
+                      out_times: np.ndarray) -> np.ndarray:
+    """Resamples one tick's block (assumed to span the real, wall-clock
+    window [raw_start, raw_end) uniformly) onto `out_times` - absolute
+    output-sample instants on a continuous timeline that spans the *whole*
+    recording, not just this tick. This is what makes consecutive ticks
+    phase-continuous: resampling each tick to its own fresh [0, 1) axis
+    (an earlier version of this fix) independently maps every chunk's
+    endpoints, which are not guaranteed to line up with the previous
+    chunk's - confirmed by direct testing (a synthetic, perfectly smooth
+    tone split into ticks that way showed a real, elevated discontinuity at
+    every single tick boundary, audible as the reported creaking/grinding).
+    Interpolating against one continuous absolute clock instead removes
+    that seam entirely."""
     channels = block.shape[1] if block.ndim == 2 else 1
     n = block.shape[0]
-    if n == 0 or target_frames <= 0:
-        return np.zeros((max(0, target_frames), channels), dtype=np.float32)
-    if n == target_frames:
-        return block
-    old_idx = np.linspace(0.0, 1.0, n, endpoint=False)
-    new_idx = np.linspace(0.0, 1.0, target_frames, endpoint=False)
-    out = np.empty((target_frames, channels), dtype=np.float32)
+    count = len(out_times)
+    if count == 0:
+        return np.zeros((0, channels), dtype=np.float32)
+    if n == 0 or raw_end <= raw_start:
+        return np.zeros((count, channels), dtype=np.float32)
+    raw_times = raw_start + np.linspace(0.0, raw_end - raw_start, n, endpoint=False)
+    out = np.empty((count, channels), dtype=np.float32)
     for ch in range(channels):
-        out[:, ch] = np.interp(new_idx, old_idx, block[:, ch])
+        out[:, ch] = np.interp(out_times, raw_times, block[:, ch])
     return out
 
 
@@ -222,7 +231,23 @@ class _SourceStream:
                     mic = sc.get_microphone(self.device.name, include_loopback=True)
                     with mic.recorder(samplerate=self.samplerate, channels=self.channels) as rec:
                         ready.set()
-                        chunk = max(1, int(self.samplerate * _CHUNK_SECONDS))
+                        # Deliberately much smaller than the mix tick
+                        # (_CHUNK_SECONDS): rec.record(numframes=N) blocks
+                        # until N frames exist, on its own clock, entirely
+                        # independent of the mix thread's wall-clock tick.
+                        # Sized to one full tick, a block that's slow to
+                        # fill (real capture running behind the requested
+                        # rate) can straddle a tick boundary and land almost
+                        # entirely in one drain() call instead of being
+                        # spread across the ticks it actually spans -
+                        # confirmed by direct testing to compress that
+                        # audio into too short a declared time window and
+                        # produce an audible artifact. Pulling in much
+                        # smaller pieces bounds how much real time a single
+                        # queued block can represent, keeping each mix
+                        # tick's drain() close to that tick's real span
+                        # regardless of the loopback device's actual rate.
+                        chunk = max(1, int(self.samplerate * _LOOPBACK_PULL_SECONDS))
                         while not self._stop_flag.is_set():
                             data = rec.record(numframes=chunk)
                             self.blocks.put(data)
@@ -294,6 +319,12 @@ class Recorder:
         self._paused_since = None
         self._paused_accum = 0.0
         self._target_rate = 48000
+        # Continuous output-timeline state for _resample_window - see its
+        # docstring. _cum_real_time never advances while paused (see
+        # _mix_and_write), so paused stretches are excluded from the output
+        # exactly like they're excluded from elapsed_seconds().
+        self._cum_real_time = 0.0
+        self._next_out_time = 0.0
 
     def start(self) -> None:
         channels = max(1, min(max(d.channels for d, _ in self._device_specs), 2))
@@ -371,13 +402,30 @@ class Recorder:
         # meter per active source (mic + system) instead of one blended number.
         per_source_peaks = [float(np.abs(b).max()) if b.size else 0.0 for b in blocks]
 
-        # Conform every source to exactly the frame count this tick's real
-        # wall-clock duration implies at the declared rate - not however many
-        # raw frames the device happened to deliver (see module docstring).
-        # This also keeps multi-source mixing aligned without truncating
-        # whichever source delivered more frames this tick.
-        target_frames = max(0, int(round(real_elapsed * self._target_rate)))
-        resampled = [_resample_to(b, target_frames) for b in blocks]
+        # Conform every source to the output samples this tick's real
+        # wall-clock window implies at the declared rate - not however many
+        # raw frames the device happened to deliver (see module docstring) -
+        # continuing the same absolute output clock across ticks (see
+        # _resample_window) rather than resetting it each tick. This also
+        # keeps multi-source mixing aligned without truncating whichever
+        # source delivered more raw frames this tick.
+        raw_start = self._cum_real_time
+        raw_end = raw_start + max(0.0, real_elapsed)
+        self._cum_real_time = raw_end
+        # Clamped to raw_start: floating-point accumulation in _cum_real_time
+        # can otherwise leave _next_out_time a hair behind this tick's own
+        # window (confirmed by direct testing) - out_times would then start
+        # slightly *before* raw_start, get resampled against THIS tick's
+        # block anyway, clamp to its first raw sample (np.interp doesn't
+        # extrapolate), and produce a wrong value right at the seam. Losing
+        # that sub-sample sliver of time (a few dozen microseconds) is
+        # inaudible; resampling it against the wrong tick's data was not.
+        start_time = max(self._next_out_time, raw_start)
+        count = max(0, int(np.floor((raw_end - start_time) * self._target_rate)))
+        out_times = start_time + np.arange(count) / self._target_rate
+        self._next_out_time = start_time + count / self._target_rate
+
+        resampled = [_resample_window(b, raw_start, raw_end, out_times) for b in blocks]
         mixed = resampled[0] if len(resampled) == 1 else sum(b * _MIX_GAIN for b in resampled)
 
         if mixed.size:
