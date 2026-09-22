@@ -107,6 +107,31 @@ def list_loopback_outputs() -> list:
     return devices
 
 
+def _patch_wav_samplerate(path: Path, samplerate: int) -> None:
+    """wave.Wave_write bakes the sample rate into the header at open() time,
+    from a short calibration measurement that isn't always representative of
+    the WHOLE recording's true average throughput - confirmed by direct
+    testing, where the mismatch's size AND direction differed between
+    machines and recording lengths (a real device/driver clock quirk, not
+    something a fixed correction factor can paper over). This patches the
+    already-written 44-byte PCM WAV header's sample-rate and byte-rate
+    fields after the fact, using total frames actually written divided by
+    total actual recording time - the one number that's correct for this
+    specific file by construction, regardless of whatever the device or
+    driver did under the hood during the session."""
+    with open(path, "r+b") as f:
+        f.seek(22)
+        channels = int.from_bytes(f.read(2), "little")
+        f.seek(34)
+        bits_per_sample = int.from_bytes(f.read(2), "little")
+        block_align = channels * (bits_per_sample // 8)
+        byte_rate = int(samplerate) * block_align
+        f.seek(24)
+        f.write(int(samplerate).to_bytes(4, "little"))
+        f.seek(28)
+        f.write(byte_rate.to_bytes(4, "little"))
+
+
 def resolve_device(devices: list, preferred_name):
     """Picks preferred_name from devices if it's still present, else the
     current OS-default device, else the first available (or None if the
@@ -255,6 +280,7 @@ class Recorder:
         self._start_time = None
         self._paused_since = None
         self._paused_accum = 0.0
+        self._frames_written_total = 0
 
     def start(self) -> None:
         channels = max(1, min(max(d.channels for d, _ in self._device_specs), 2))
@@ -276,17 +302,27 @@ class Recorder:
             self._sources = []
             raise
 
+        # elapsed_seconds() (and the final rate correction in stop()) must
+        # both measure from the same moment the sources actually went live -
+        # set before the calibration sleep below, not after, or the
+        # calibration window's own frames/time would be double-counted
+        # inconsistently between the two.
+        self._start_time = time.monotonic()
+
         # Calibrate rather than trust the requested/reported rate: on some
         # real devices, WASAPI silently delivers audio at a different actual
         # throughput than what was requested (confirmed by direct testing -
         # a "48000 Hz" exclusive-mode stream measured at ~70 kHz actual
         # throughput on one real device, shared mode at ~43 kHz on the same
-        # device). Labeling the WAV with the wrong rate doesn't lose or
-        # corrupt any audio, but it plays back badly pitch-shifted - which
-        # is exactly what sounds like "crackling"/garbled speech. Measuring
-        # actual throughput over a short wall-clock window and using that
-        # for the file header fixes this regardless of what the device or
-        # driver actually does under the hood.
+        # device - and the exclusive-mode mismatch even varies noticeably
+        # run to run, while shared mode is highly consistent). Labeling the
+        # WAV with the wrong rate doesn't lose or corrupt any audio, but it
+        # plays back badly pitch-shifted - which is exactly what sounds like
+        # "crackling"/garbled speech. This calibration gives a reasonable
+        # starting value; stop() then corrects it using the *entire*
+        # session's real throughput, which is what actually matters for a
+        # longer recording (a short calibration window isn't always
+        # representative for the whole session - confirmed by direct testing).
         calib_window = 0.35
         calib_t0 = time.monotonic()
         time.sleep(calib_window)
@@ -312,7 +348,6 @@ class Recorder:
 
         self._mix_and_write(calib_blocks)  # don't lose the calibration-window audio
 
-        self._start_time = time.monotonic()
         self._stop_flag.clear()
         self._mix_thread = threading.Thread(target=self._mix_loop, daemon=True)
         self._mix_thread.start()
@@ -362,6 +397,7 @@ class Recorder:
             if self._wav is not None:
                 try:
                     self._wav.writeframes(pcm16.tobytes())
+                    self._frames_written_total += mixed.shape[0]
                 except Exception:
                     pass  # already closed by stop()
         self._events.put(("levels", per_source_peaks))
@@ -391,7 +427,20 @@ class Recorder:
         for src in self._sources:
             src.stop()
         self._sources = []
+        # Measured *before* elapsed_seconds() is invalidated by clearing
+        # _start_time, and before closing the file - see the final
+        # correction below, which needs both this and the frame count.
+        active_duration = self.elapsed_seconds()
         self._close_wav()
+
+        if self._frames_written_total > 0 and active_duration > 0.5:
+            true_rate = int(round(self._frames_written_total / active_duration))
+            if 8000 <= true_rate <= 192000:
+                try:
+                    _patch_wav_samplerate(self._out_path, true_rate)
+                except Exception:
+                    pass  # keep the calibration-based rate already in the file
+
         return self._out_path
 
     def _close_wav(self):

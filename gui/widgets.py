@@ -5,8 +5,8 @@ import time
 
 import core
 
-from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtCore import Signal, Qt, QRectF, QPointF
+from PySide6.QtGui import QColor, QPainter, QLinearGradient, QBrush, QPen, QPainterPath
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QProgressBar, QSizePolicy, QWidget
 
 from .i18n import tr
@@ -49,24 +49,23 @@ class _ElidedLabel(QLabel):
 
 
 class LevelMeterWidget(QWidget):
-    """Vertical, segmented VU-style meter on a dB scale, with peak-hold and
-    a numeric dB readout - a custom paintEvent instead of a QProgressBar,
-    whose chunked style and min/max/value semantics fight a clean
-    peak-hold/color-zone/scale look. Vertical + size-policy Expanding so it
-    fills whatever height the panel around it has free, rather than sitting
-    as a thin fixed-height strip."""
+    """Vertical level meter on a dB scale: a smooth gradient-filled,
+    rounded bar with a peak-hold line and a numeric dB readout - a custom
+    paintEvent instead of a QProgressBar, whose chunked style and
+    min/max/value semantics fight a clean look. Vertical + size-policy
+    Expanding so it fills whatever height the panel around it has free,
+    rather than sitting as a thin fixed-height strip."""
 
     _DECAY = 0.94  # per set_level() call - the meter is driven at ~25fps, so this reads as a fast but visible fall-off
-    _SEGMENTS = 28
-    _SEGMENT_GAP = 2
     _MIN_DB = -48.0
     _SCALE_MARKS = (-40, -20, -12, -6, -3, 0)
-    _SCALE_TEXT_WIDTH = 26
+    _SCALE_TEXT_WIDTH = 24
     _READOUT_HEIGHT = 14
+    _CORNER_RADIUS = 5.0
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumWidth(44)
+        self.setMinimumWidth(40)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self._level = 0.0
         self._peak_hold = 0.0
@@ -91,49 +90,56 @@ class LevelMeterWidget(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, False)
+        painter.setRenderHint(QPainter.Antialiasing, True)
         rect = self.rect()
         bar_w = max(1, rect.width() - self._SCALE_TEXT_WIDTH)
-        bar_top = 0
         bar_h = max(1, rect.height() - self._READOUT_HEIGHT)
+        track_rect = QRectF(0.0, 0.0, bar_w, bar_h)
 
-        painter.fillRect(0, bar_top, bar_w, bar_h, QColor("#1e1e1e"))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#1c1c1c"))
+        painter.drawRoundedRect(track_rect, self._CORNER_RADIUS, self._CORNER_RADIUS)
 
         level_frac = self._to_frac(self._level)
-        active_segments = round(level_frac * self._SEGMENTS)
-        seg_h = (bar_h - self._SEGMENT_GAP * (self._SEGMENTS - 1)) / self._SEGMENTS
-        for i in range(self._SEGMENTS):
-            frac_i = i / self._SEGMENTS
-            if frac_i < 0.65:
-                on, off = QColor("#2ecc71"), QColor("#21301f")
-            elif frac_i < 0.85:
-                on, off = QColor("#f1c40f"), QColor("#332d17")
-            else:
-                on, off = QColor("#e74c3c"), QColor("#331c1a")
-            # i=0 is the bottom (quietest) segment - fill upward as level rises.
-            y = bar_top + bar_h - (i + 1) * (seg_h + self._SEGMENT_GAP) + self._SEGMENT_GAP
-            painter.fillRect(0, int(y), bar_w, max(1, int(seg_h)), on if i < active_segments else off)
+        fill_h = level_frac * bar_h
+        if fill_h > 0.5:
+            # Clip to the track's rounded shape so a short fill doesn't show
+            # square corners poking out of the rounded track underneath it.
+            painter.save()
+            clip_path = QPainterPath()
+            clip_path.addRoundedRect(track_rect, self._CORNER_RADIUS, self._CORNER_RADIUS)
+            painter.setClipPath(clip_path)
+            fill_rect = QRectF(0.0, bar_h - fill_h, bar_w, fill_h)
+            gradient = QLinearGradient(0.0, bar_h, 0.0, 0.0)
+            gradient.setColorAt(0.0, QColor("#27ae60"))
+            gradient.setColorAt(0.60, QColor("#2ecc71"))
+            gradient.setColorAt(0.80, QColor("#f1c40f"))
+            gradient.setColorAt(1.0, QColor("#e74c3c"))
+            painter.setBrush(QBrush(gradient))
+            painter.drawRect(fill_rect)
+            painter.restore()
 
         peak_frac = self._to_frac(self._peak_hold)
         if peak_frac > 0:
-            peak_y = bar_top + bar_h - int(peak_frac * bar_h)
-            painter.fillRect(0, max(bar_top, peak_y - 1), bar_w, 2, QColor("#ffffff"))
+            peak_y = bar_h - peak_frac * bar_h
+            painter.setPen(QPen(QColor("#f5f5f5"), 2))
+            painter.drawLine(QPointF(2, peak_y), QPointF(bar_w - 2, peak_y))
 
-        painter.setPen(QColor("#888888"))
+        painter.setPen(QColor("#8a8a8a"))
         font = painter.font()
         font.setPointSize(7)
         painter.setFont(font)
         for mark_db in self._SCALE_MARKS:
             f = (mark_db - self._MIN_DB) / (0.0 - self._MIN_DB)
-            y = bar_top + bar_h - int(f * bar_h)
-            painter.drawText(bar_w + 3, y - 6, self._SCALE_TEXT_WIDTH - 3, 12,
+            y = bar_h - f * bar_h
+            painter.drawText(QRectF(bar_w + 4, y - 6, self._SCALE_TEXT_WIDTH - 4, 12),
                               Qt.AlignVCenter | Qt.AlignLeft, str(mark_db))
 
         # Below the bar, clearly separated from the "0" scale mark at the
         # top - level with it read as if it were (mis)labeling that mark.
         peak_db = self._MIN_DB if self._peak_hold <= 0 else max(self._MIN_DB, 20.0 * math.log10(self._peak_hold))
         painter.setPen(QColor("#cccccc"))
-        painter.drawText(0, bar_h + 2, rect.width(), self._READOUT_HEIGHT, Qt.AlignCenter,
+        painter.drawText(QRectF(0, bar_h + 2, rect.width(), self._READOUT_HEIGHT), Qt.AlignCenter,
                           tr("Peak: {db} dB", db=f"{peak_db:.0f}"))
         painter.end()
 

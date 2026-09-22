@@ -218,9 +218,11 @@ _UK = {
     "System default": "За замовчуванням у системі",
     "Exclusive mode for microphone recording": "Ексклюзивний режим для запису з мікрофона",
     "Blocks other apps from using the microphone while recording. "
-    "Only applies to the microphone - system-audio capture is always shared.":
+    "Only applies to the microphone - system-audio capture is always shared. "
+    "Off by default: more reliable on most built-in/generic microphones.":
         "Блокує іншим програмам доступ до мікрофона під час запису. "
-        "Стосується лише мікрофона - запис системного звуку завжди спільний.",
+        "Стосується лише мікрофона - запис системного звуку завжди спільний. "
+        "Вимкнено за замовчуванням: надійніше працює з більшістю вбудованих/звичайних мікрофонів.",
     "Hardware": "Обладнання",
     "CPU: {name}": "CPU: {name}",
     "GPU: {name}": "GPU: {name}",
