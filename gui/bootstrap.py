@@ -27,6 +27,7 @@ import core
 from .i18n import tr
 
 _REQUIRED_MODULES = ("torch", "faster_whisper", "pyannote.audio")
+_RECORDING_MODULES = ("sounddevice", "soundcard")
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 # Matches pip's "Downloading ...whl (12.6 MB)" or "Using cached ...whl
@@ -86,6 +87,23 @@ def dependencies_installed() -> bool:
     """Cheap presence check (no actual import), since this runs on every
     launch, not just the first."""
     return all(importlib.util.find_spec(mod) is not None for mod in _REQUIRED_MODULES)
+
+
+def _ensure_recording_deps() -> None:
+    """sounddevice/soundcard are tiny pure-Python wheels (seconds, not the
+    multi-GB torch/pyannote install) - installed separately and silently
+    here rather than folded into dependencies_installed()'s heavy-ML gate,
+    since an upgrading user already has torch/faster-whisper/pyannote
+    importable and so would otherwise never have pip re-run at all, and
+    would never get these two new packages for the recording feature."""
+    if all(importlib.util.find_spec(mod) is not None for mod in _RECORDING_MODULES):
+        return
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-q", *_RECORDING_MODULES],
+            capture_output=True, timeout=120, creationflags=_CREATE_NO_WINDOW)
+    except Exception:
+        pass  # non-fatal - the recording panel surfaces a clear error if these truly never land
 
 
 def _nvidia_gpu_present() -> bool:
@@ -358,6 +376,7 @@ def ensure_dependencies(requirements_path: Path, model_spec=None, hf_token: str 
     installed and usable. model_error is a non-fatal message if model_spec
     was given and its download failed (empty otherwise). Shows one combined
     dialog covering whichever of (pip deps, model_spec) is actually needed."""
+    _ensure_recording_deps()
     install_deps = not dependencies_installed()
     if not install_deps and model_spec is None:
         return True, ""

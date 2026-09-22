@@ -2,32 +2,43 @@
 
 import shutil
 import time
+from datetime import datetime
 from pathlib import Path
 
 import core
 
 from PySide6.QtCore import Qt, QSettings, QThread, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QTextCursor, QColor
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem,
-    QPushButton, QComboBox, QCheckBox, QLabel, QProgressBar, QTextEdit,
+    QPushButton, QComboBox, QCheckBox, QLabel, QProgressBar, QTextEdit, QSlider,
     QFileDialog, QMessageBox, QSpinBox, QToolTip,
 )
 
 from .device_prefs import get_device_preference
 from .i18n import tr, get_language
+from .recording_prefs import (
+    get_recording_source, set_recording_source,
+    get_last_mic_device_name, set_last_mic_device_name,
+    get_last_loopback_device_name, set_last_loopback_device_name,
+    get_exclusive_default, set_exclusive_default,
+)
+from .recording_worker import RecordingController
 from .settings_dialog import SettingsDialog
 from .style import get_prevent_sleep_preference
 from .dialogs import SpeakerNameDialog
 from .update_dialog import UpdateDownloadDialog
+from .widgets import LevelMeterWidget
 from .workers import TranscriptionWorker, DiarizationWorker, UpdateCheckWorker
 
-_PREFERRED_WIDTH = 1080
+_PREFERRED_WIDTH = 1340
 _PREFERRED_HEIGHT = 680
-_MIN_WIDTH = 760
+_MIN_WIDTH = 920
 _MIN_HEIGHT = 480
 _SIDEBAR_WIDTH = 300
+_RECORDING_PANEL_WIDTH = 260
 _STARTUP_UPDATE_CHECK_DELAY_MS = 10_000
 
 _ABOUT_TEXT = (
@@ -65,6 +76,20 @@ class MainWindow(QMainWindow):
         self._progress_phase_start = None
         self._current_file_index = 0
         self._diarize_models_missing_notified = False
+
+        self._recording_controller = None
+        self._recording_devices = []
+        self._elapsed_timer = QTimer(self)
+        self._elapsed_timer.timeout.connect(self._update_elapsed_label)
+
+        # Created once, reused across files - independent of the recording
+        # subsystem above (sounddevice/soundcard); playback is 100% QtMultimedia.
+        self._media_player = QMediaPlayer(self)
+        self._audio_output = QAudioOutput(self)
+        self._media_player.setAudioOutput(self._audio_output)
+        self._media_player.positionChanged.connect(self._on_playback_position_changed)
+        self._media_player.durationChanged.connect(self._on_playback_duration_changed)
+        self._media_player.playbackStateChanged.connect(self._on_playback_state_changed)
 
         self._build_ui()
         self._apply_initial_geometry()
@@ -113,8 +138,170 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(16)
 
+        root.addWidget(self._build_recording_panel())
         root.addLayout(self._build_main_column(), stretch=1)
         root.addWidget(self._build_sidebar())
+
+    def _build_recording_panel(self):
+        panel = QWidget()
+        panel.setFixedWidth(_RECORDING_PANEL_WIDTH)
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        self._record_box = QGroupBox(tr("Record audio"))
+        layout = QVBoxLayout(self._record_box)
+        layout.setSpacing(10)
+
+        self._record_source_label = QLabel(tr("Source:"))
+        layout.addWidget(self._record_source_label)
+        self._record_source_combo = QComboBox()
+        self._record_source_combo.addItem(tr("Microphone"), "microphone")
+        self._record_source_combo.addItem(tr("System audio"), "system")
+        self._record_source_combo.currentIndexChanged.connect(self._on_record_source_changed)
+        layout.addWidget(self._record_source_combo)
+
+        self._record_device_label = QLabel(tr("Device:"))
+        layout.addWidget(self._record_device_label)
+        self._record_device_combo = QComboBox()
+        layout.addWidget(self._record_device_combo)
+
+        self._exclusive_checkbox = QCheckBox(tr("Exclusive mode"))
+        self._exclusive_checkbox.toggled.connect(set_exclusive_default)
+        layout.addWidget(self._exclusive_checkbox)
+
+        self._level_meter = LevelMeterWidget()
+        layout.addWidget(self._level_meter)
+
+        self._record_elapsed_label = QLabel("00:00")
+        self._record_elapsed_label.setProperty("hint", True)
+        self._record_elapsed_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self._record_elapsed_label)
+
+        self._record_btn = QPushButton(tr("Record"))
+        self._record_btn.setObjectName("primaryButton")
+        self._record_btn.clicked.connect(self._on_record_clicked)
+        layout.addWidget(self._record_btn)
+
+        layout.addStretch()
+        outer.addWidget(self._record_box)
+
+        idx = self._record_source_combo.findData(get_recording_source())
+        self._record_source_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._on_record_source_changed(self._record_source_combo.currentIndex())
+
+        return panel
+
+    def _current_record_source(self):
+        return self._record_source_combo.currentData()
+
+    def _on_record_source_changed(self, _index):
+        is_mic = self._current_record_source() == "microphone"
+        set_recording_source("microphone" if is_mic else "system")
+
+        self._record_device_combo.clear()
+        self._recording_devices = core.list_microphones() if is_mic else core.list_loopback_outputs()
+        last_name = get_last_mic_device_name() if is_mic else get_last_loopback_device_name()
+        for d in self._recording_devices:
+            self._record_device_combo.addItem(d.name, d.name)
+        select_idx = self._record_device_combo.findData(last_name) if last_name else -1
+        if select_idx < 0:
+            select_idx = next((i for i, d in enumerate(self._recording_devices) if d.is_default), 0)
+        if self._record_device_combo.count():
+            self._record_device_combo.setCurrentIndex(max(select_idx, 0))
+        self._record_device_combo.currentIndexChanged.connect(
+            self._on_record_device_changed, Qt.UniqueConnection)
+
+        self._exclusive_checkbox.setEnabled(is_mic)
+        if is_mic:
+            self._exclusive_checkbox.setChecked(get_exclusive_default())
+            self._exclusive_checkbox.setToolTip("")
+        else:
+            self._exclusive_checkbox.setChecked(False)
+            self._exclusive_checkbox.setToolTip(tr(
+                "System-audio capture is always shared - Windows allows multiple "
+                "apps to tap the same output stream at once."))
+
+    def _on_record_device_changed(self, _index):
+        name = self._record_device_combo.currentData()
+        if not name:
+            return
+        if self._current_record_source() == "microphone":
+            set_last_mic_device_name(name)
+        else:
+            set_last_loopback_device_name(name)
+
+    def _selected_record_device(self):
+        name = self._record_device_combo.currentData()
+        return next((d for d in self._recording_devices if d.name == name), None)
+
+    def _on_record_clicked(self):
+        if self._recording_controller is None:
+            self._start_recording()
+        else:
+            self._stop_recording()
+
+    def _start_recording(self):
+        device = self._selected_record_device()
+        if device is None:
+            QMessageBox.information(self, tr("Record"), tr("No recording device available."))
+            return
+        is_mic = self._current_record_source() == "microphone"
+        core.ensure_workdirs()
+        out_path = core.INPUT_DIR / f"Recording {datetime.now():%Y-%m-%d %H-%M-%S}.wav"
+
+        controller = RecordingController(
+            device, out_path, loopback=not is_mic,
+            exclusive=is_mic and self._exclusive_checkbox.isChecked())
+        controller.level.connect(self._level_meter.set_level)
+        controller.error.connect(self._on_recording_error)
+        controller.stopped.connect(self._on_recording_stopped)
+        try:
+            controller.start()
+        except core.RecordingError as e:
+            QMessageBox.warning(self, tr("Recording failed"), str(e))
+            return
+
+        self._recording_controller = controller
+        self._elapsed_timer.start(500)
+        self._record_btn.setText(tr("Stop"))
+        self._record_source_combo.setEnabled(False)
+        self._record_device_combo.setEnabled(False)
+        self._exclusive_checkbox.setEnabled(False)
+
+    def _stop_recording(self):
+        if self._recording_controller is None:
+            return
+        self._recording_controller.stop()
+
+    def _on_recording_error(self, message):
+        QMessageBox.warning(self, tr("Recording"), message)
+        self._stop_recording()
+
+    def _on_recording_stopped(self, path_str):
+        self._recording_controller = None
+        self._elapsed_timer.stop()
+        self._level_meter.reset()
+        self._record_elapsed_label.setText("00:00")
+        self._record_btn.setText(tr("Record"))
+        self._record_source_combo.setEnabled(True)
+        self._record_device_combo.setEnabled(True)
+        self._on_record_source_changed(self._record_source_combo.currentIndex())
+        self._refresh_file_list(select_all=False)
+        self._select_file_by_path(Path(path_str))
+
+    def _update_elapsed_label(self):
+        if self._recording_controller is None:
+            return
+        secs = int(self._recording_controller.elapsed_seconds())
+        self._record_elapsed_label.setText(f"{secs // 60:02d}:{secs % 60:02d}")
+
+    def _select_file_by_path(self, path: Path):
+        for row in range(self._file_table.rowCount()):
+            item = self._file_table.item(row, 0)
+            if item is not None and item.data(Qt.UserRole) == path:
+                self._file_table.selectRow(row)
+                self._file_table.scrollToItem(item)
+                return
 
     def _build_main_column(self):
         col = QVBoxLayout()
@@ -137,6 +324,8 @@ class MainWindow(QMainWindow):
         for col_idx in (1, 2, 3):
             header.setSectionResizeMode(col_idx, QHeaderView.ResizeToContents)
         self._file_table.itemSelectionChanged.connect(self._refresh_diarize_button)
+        self._file_table.itemSelectionChanged.connect(self._refresh_play_button)
+        self._file_table.itemDoubleClicked.connect(self._on_file_double_clicked)
         files_layout.addWidget(self._file_table, stretch=1)
 
         self._empty_hint = QLabel(tr("No files yet - click \"Add files...\" or drop some into input\\"))
@@ -151,11 +340,29 @@ class MainWindow(QMainWindow):
         self._refresh_btn.clicked.connect(self._refresh_file_list)
         self._delete_btn = QPushButton(tr("Delete selected"))
         self._delete_btn.clicked.connect(self._on_delete_files)
+        self._play_btn = QPushButton(tr("Play"))
+        self._play_btn.clicked.connect(self._on_play_clicked)
+        self._play_btn.setEnabled(False)
         file_btn_row.addWidget(self._add_btn)
         file_btn_row.addWidget(self._refresh_btn)
         file_btn_row.addWidget(self._delete_btn)
+        file_btn_row.addWidget(self._play_btn)
         file_btn_row.addStretch()
         files_layout.addLayout(file_btn_row)
+
+        # Hidden until the first Play, so it never takes up space otherwise.
+        self._playback_row_widget = QWidget()
+        playback_row = QHBoxLayout(self._playback_row_widget)
+        playback_row.setContentsMargins(0, 0, 0, 0)
+        self._playback_time_label = QLabel("0:00 / 0:00")
+        self._playback_time_label.setProperty("hint", True)
+        self._playback_slider = QSlider(Qt.Horizontal)
+        self._playback_slider.sliderMoved.connect(self._on_playback_slider_moved)
+        playback_row.addWidget(self._playback_time_label)
+        playback_row.addWidget(self._playback_slider, stretch=1)
+        self._playback_row_widget.setVisible(False)
+        files_layout.addWidget(self._playback_row_widget)
+
         # Equal stretch with the transcript box below: a fixed 50/50 split
         # of the column regardless of whether there are files to list.
         col.addWidget(self._files_box, stretch=1)
@@ -291,6 +498,8 @@ class MainWindow(QMainWindow):
         self._add_btn.setText(tr("Add files..."))
         self._refresh_btn.setText(tr("Refresh"))
         self._delete_btn.setText(tr("Delete selected"))
+        self._play_btn.setText(
+            tr("Pause") if self._media_player.playbackState() == QMediaPlayer.PlayingState else tr("Play"))
         self._transcript_box.setTitle(tr("Transcript"))
         self._transcript_view.setPlaceholderText(
             tr("The transcript will appear here once processing starts..."))
@@ -318,6 +527,15 @@ class MainWindow(QMainWindow):
         self._overall_progress_bar.setFormat(tr("File %v of %m"))
         self._current_file_label.setText(tr("Current file"))
         self._open_output_btn.setText(tr("Open output folder"))
+
+        self._record_box.setTitle(tr("Record audio"))
+        self._record_source_label.setText(tr("Source:"))
+        self._record_device_label.setText(tr("Device:"))
+        self._record_source_combo.setItemText(0, tr("Microphone"))
+        self._record_source_combo.setItemText(1, tr("System audio"))
+        self._exclusive_checkbox.setText(tr("Exclusive mode"))
+        if self._recording_controller is None:
+            self._record_btn.setText(tr("Record"))
 
     # --- refresh helpers -------------------------------------------------
 
@@ -651,6 +869,52 @@ class MainWindow(QMainWindow):
             f.unlink(missing_ok=True)
         self._refresh_file_list()
 
+    # --- playback ------------------------------------------------------
+
+    def _refresh_play_button(self):
+        self._play_btn.setEnabled(len(self._selected_files()) == 1)
+
+    def _on_file_double_clicked(self, _item):
+        files = self._selected_files()
+        if len(files) == 1:
+            self._play_file(files[0])
+
+    def _on_play_clicked(self):
+        if self._media_player.playbackState() == QMediaPlayer.PlayingState:
+            self._media_player.pause()
+            return
+        if self._media_player.playbackState() == QMediaPlayer.PausedState:
+            self._media_player.play()
+            return
+        files = self._selected_files()
+        if len(files) == 1:
+            self._play_file(files[0])
+
+    def _play_file(self, path: Path):
+        self._media_player.setSource(QUrl.fromLocalFile(str(path)))
+        self._media_player.play()
+        self._playback_row_widget.setVisible(True)
+
+    def _on_playback_position_changed(self, position_ms):
+        if not self._playback_slider.isSliderDown():
+            self._playback_slider.setValue(position_ms)
+        self._update_playback_time_label(position_ms, self._media_player.duration())
+
+    def _on_playback_duration_changed(self, duration_ms):
+        self._playback_slider.setRange(0, duration_ms)
+        self._update_playback_time_label(self._media_player.position(), duration_ms)
+
+    def _on_playback_slider_moved(self, position_ms):
+        self._media_player.setPosition(position_ms)
+
+    def _on_playback_state_changed(self, state):
+        self._play_btn.setText(tr("Pause") if state == QMediaPlayer.PlayingState else tr("Play"))
+
+    def _update_playback_time_label(self, position_ms, duration_ms):
+        pos = core.format_time(position_ms / 1000)
+        dur = core.format_time(duration_ms / 1000) if duration_ms > 0 else "0:00"
+        self._playback_time_label.setText(f"{pos} / {dur}")
+
     def _begin_run(self, file_count):
         if get_prevent_sleep_preference():
             core.set_sleep_prevention(True)
@@ -832,6 +1096,13 @@ class MainWindow(QMainWindow):
         self._refresh_diarize_button()
 
     def closeEvent(self, event):
+        if self._recording_controller is not None:
+            ans = QMessageBox.question(
+                self, tr("Recording in progress"), tr("A recording is still running. Stop it and quit?"))
+            if ans != QMessageBox.Yes:
+                event.ignore()
+                return
+            self._recording_controller.stop()
         if self._worker is not None:
             ans = QMessageBox.question(
                 self, tr("Transcription running"), tr("A transcription is still running. Cancel it and quit?"))

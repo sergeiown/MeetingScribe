@@ -55,6 +55,9 @@ from .config_env import (
     has_diarization_support, is_diar_pipeline_cached,
 )
 from .results import save_result, save_segments, load_segments, file_status
+from .recording import (
+    RecordingError, AudioDevice, Recorder, list_microphones, list_loopback_outputs,
+)
 
 __all__ = [
     "VERSION", "GITHUB_REPO", "check_for_update",
@@ -86,4 +89,5 @@ __all__ = [
     "read_config_env", "write_config_env", "read_hf_token",
     "has_diarization_support", "is_diar_pipeline_cached",
     "save_result", "save_segments", "load_segments", "file_status",
+    "RecordingError", "AudioDevice", "Recorder", "list_microphones", "list_loopback_outputs",
 ]

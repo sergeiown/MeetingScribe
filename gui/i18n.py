@@ -291,6 +291,28 @@ _UK = {
     "Loading embedding model...": "Завантаження моделі ембеддингів...",
     "Embedding model not cached locally - attempting download...":
         "Модель ембеддингів не кешована локально - спроба завантаження...",
+
+    # recording panel + playback (main_window.py)
+    "Record audio": "Запис аудіо",
+    "Source:": "Джерело:",
+    "Microphone": "Мікрофон",
+    "System audio": "Системний звук",
+    "Device:": "Пристрій:",
+    "Exclusive mode": "Ексклюзивний режим",
+    "System-audio capture is always shared - Windows allows multiple "
+    "apps to tap the same output stream at once.":
+        "Запис системного звуку завжди спільний - Windows дозволяє кільком "
+        "програмам одночасно знімати той самий вихідний потік.",
+    "Record": "Запис",
+    "Recording failed": "Помилка запису",
+    "No recording device available.": "Немає доступного пристрою запису.",
+    "Recording": "Запис",
+    "Recording in progress": "Триває запис",
+    "A recording is still running. Stop it and quit?":
+        "Запис ще триває. Зупинити його і вийти?",
+    "Play": "Відтворити",
+    "Pause": "Пауза",
+    "Stop": "Стоп",
 }
 
 _CATALOG = {"uk": _UK}

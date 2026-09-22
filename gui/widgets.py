@@ -5,7 +5,8 @@ import time
 import core
 
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QProgressBar, QSizePolicy
+from PySide6.QtGui import QColor, QPainter
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QProgressBar, QSizePolicy, QWidget
 
 from .i18n import tr
 
@@ -44,6 +45,57 @@ class _ElidedLabel(QLabel):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_elided()
+
+
+class LevelMeterWidget(QWidget):
+    """Horizontal peak-level bar with green/yellow/red zones and a briefly
+    held peak tick. A custom paintEvent instead of a QProgressBar: a
+    progress bar's chunked style and min/max/value semantics fight a clean
+    peak-hold/color-zone look; a bare paintEvent is simpler and correct."""
+
+    _DECAY = 0.94  # per set_level() call - the meter is driven at ~25fps, so this reads as a fast but visible fall-off
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(18)
+        self._level = 0.0
+        self._peak_hold = 0.0
+
+    def set_level(self, level: float) -> None:
+        self._level = max(0.0, min(1.0, level))
+        self._peak_hold = max(self._peak_hold * self._DECAY, self._level)
+        self.update()
+
+    def reset(self) -> None:
+        self._level = 0.0
+        self._peak_hold = 0.0
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, False)
+        rect = self.rect()
+        painter.fillRect(rect, QColor("#1e1e1e"))
+
+        width = rect.width()
+        level_px = int(width * self._level)
+        if level_px > 0:
+            green_end = int(width * 0.7)
+            yellow_end = int(width * 0.9)
+            if level_px <= green_end:
+                painter.fillRect(0, 0, level_px, rect.height(), QColor("#2ecc71"))
+            elif level_px <= yellow_end:
+                painter.fillRect(0, 0, green_end, rect.height(), QColor("#2ecc71"))
+                painter.fillRect(green_end, 0, level_px - green_end, rect.height(), QColor("#f1c40f"))
+            else:
+                painter.fillRect(0, 0, green_end, rect.height(), QColor("#2ecc71"))
+                painter.fillRect(green_end, 0, yellow_end - green_end, rect.height(), QColor("#f1c40f"))
+                painter.fillRect(yellow_end, 0, level_px - yellow_end, rect.height(), QColor("#e74c3c"))
+
+        peak_px = int(width * self._peak_hold)
+        if peak_px > 1:
+            painter.fillRect(peak_px - 2, 0, 2, rect.height(), QColor("#ffffff"))
+        painter.end()
 
 
 class ModelRowWidget(QFrame):
