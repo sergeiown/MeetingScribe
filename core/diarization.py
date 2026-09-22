@@ -1,5 +1,6 @@
 """Speaker diarization via pyannote.audio."""
 
+import contextlib
 import logging
 import warnings
 import wave
@@ -13,6 +14,31 @@ from .device import detect_device
 from .paths import MODELS_DIR
 
 _log = logging.getLogger(__name__)
+
+
+@contextlib.contextmanager
+def _skip_unused_plda_fetch():
+    """pyannote.audio 4.x's SpeakerDiarization.__init__ unconditionally
+    calls get_plda() to fetch a PLDA checkpoint, even for a pipeline config
+    (like speaker-diarization-3.1's, predating PLDA support) that never
+    overrides `plda:` - its default falls back to a checkpoint in a whole
+    separate gated repo (pyannote/speaker-diarization-community-1) that
+    isn't in our own model catalog and needs its own HF gate acceptance, so
+    pipeline construction fails outright for anyone who's only accepted
+    terms for the 4 models this app actually asks users to download.
+    Confirmed dead weight for our case: self._plda is only ever read when
+    the configured clustering method is "VBxClustering" (see
+    pyannote.audio.pipelines.speaker_diarization.py) - our pipeline's own
+    config.yaml sets clustering: AgglomerativeClustering, which never
+    touches it. Stubbing the fetch out for the duration of the
+    from_pretrained() call is therefore safe."""
+    import pyannote.audio.pipelines.speaker_diarization as _sd_module
+    original = _sd_module.get_plda
+    _sd_module.get_plda = lambda *a, **kw: None
+    try:
+        yield
+    finally:
+        _sd_module.get_plda = original
 
 
 @dataclass
@@ -52,7 +78,7 @@ def diarize(wav_path: str, hf_token: str, num_speakers: Optional[int] = None, *,
 
     models_dir.mkdir(exist_ok=True)
     diar_local = models_dir / "models--pyannote--speaker-diarization-3.1"
-    with silence():
+    with silence(), _skip_unused_plda_fetch():
         try:
             if diar_local.exists():
                 # Offline-first: a plain from_pretrained() still reaches out to
@@ -60,11 +86,20 @@ def diarize(wav_path: str, hf_token: str, num_speakers: Optional[int] = None, *,
                 # hang for a long time (no visible error - a confirmed real
                 # report) on a slow/flaky connection, for a model that's
                 # already fully installed and needs no network at all.
+                # cache_dir here matters even though checkpoint is already a
+                # local path: the pipeline's own config.yaml references its
+                # sub-models (segmentation, embedding) by repo id, and
+                # without cache_dir pointing at our models_dir, resolving
+                # those falls back to the default HF cache instead - not
+                # where this app actually downloads them - forcing a real
+                # network hit (or failure) even though they're installed.
                 try:
                     with hf_offline():
-                        pipeline = Pipeline.from_pretrained(str(diar_local), token=hf_token)
+                        pipeline = Pipeline.from_pretrained(
+                            str(diar_local), token=hf_token, cache_dir=str(models_dir))
                 except Exception:
-                    pipeline = Pipeline.from_pretrained(str(diar_local), token=hf_token)
+                    pipeline = Pipeline.from_pretrained(
+                        str(diar_local), token=hf_token, cache_dir=str(models_dir))
             else:
                 try:
                     with hf_offline():
