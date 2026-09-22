@@ -51,8 +51,23 @@ _ABOUT_TEXT = (
 )
 
 _HOW_TO_USE_TEXT = (
+    "<b>Recording</b>"
     "<ol>"
-    "<li>Add audio/video files with <b>Add files...</b> (or drop them into the <code>input</code> folder).</li>"
+    "<li>In the recording panel on the left, check <b>Microphone</b> and/or <b>System audio</b>, "
+    "then click <b>Record</b>. Use <b>Pause</b>/<b>Resume</b> as needed, and <b>Stop</b> to finish - "
+    "the new file appears in the list on the right automatically.</li>"
+    "<li>System audio always records in shared mode (other apps can keep using it at the same time). "
+    "The microphone can optionally use exclusive mode instead, in <b>Settings</b> - it blocks other "
+    "apps from using it while you record.</li>"
+    "</ol>"
+    "<b>Playback</b>"
+    "<ol>"
+    "<li>Select a file and click <b>Play</b>, or double-click it in the list, to listen to it.</li>"
+    "</ol>"
+    "<b>Transcribing</b>"
+    "<ol>"
+    "<li>Add audio/video files with <b>Add files...</b> (or drop them into the <code>input</code> folder) - "
+    "or just record them, as above.</li>"
     "<li>Select one or more files, pick a recognition model and language.</li>"
     "<li>Click <b>Recognize speech</b>. With automatic speaker identification off, it stops after "
     "a plain transcript - click <b>Identify speakers</b> whenever you're ready to add speaker labels.</li>"
@@ -60,8 +75,8 @@ _HOW_TO_USE_TEXT = (
     "their voiceprint for next time.</li>"
     "<li>Find the transcript in the <code>output</code> folder (one .txt per input file).</li>"
     "</ol>"
-    "Installed models, saved speakers, your Hugging Face token, theme, and interface language "
-    "are all managed from <b>Settings</b>."
+    "Installed models, saved speakers, your Hugging Face token, theme, recording devices, and "
+    "interface language are all managed from <b>Settings</b>."
 )
 
 

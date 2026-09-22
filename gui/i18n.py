@@ -62,8 +62,23 @@ _UK = {
         '<a href="https://github.com/sergeiown/MeetingScribe">github.com/sergeiown/MeetingScribe</a>',
     "How to use": "Як користуватися",
     "How to use MeetingScribe": "Як користуватися MeetingScribe",
+    "<b>Recording</b>"
     "<ol>"
-    "<li>Add audio/video files with <b>Add files...</b> (or drop them into the <code>input</code> folder).</li>"
+    "<li>In the recording panel on the left, check <b>Microphone</b> and/or <b>System audio</b>, "
+    "then click <b>Record</b>. Use <b>Pause</b>/<b>Resume</b> as needed, and <b>Stop</b> to finish - "
+    "the new file appears in the list on the right automatically.</li>"
+    "<li>System audio always records in shared mode (other apps can keep using it at the same time). "
+    "The microphone can optionally use exclusive mode instead, in <b>Settings</b> - it blocks other "
+    "apps from using it while you record.</li>"
+    "</ol>"
+    "<b>Playback</b>"
+    "<ol>"
+    "<li>Select a file and click <b>Play</b>, or double-click it in the list, to listen to it.</li>"
+    "</ol>"
+    "<b>Transcribing</b>"
+    "<ol>"
+    "<li>Add audio/video files with <b>Add files...</b> (or drop them into the <code>input</code> folder) - "
+    "or just record them, as above.</li>"
     "<li>Select one or more files, pick a recognition model and language.</li>"
     "<li>Click <b>Recognize speech</b>. With automatic speaker identification off, it stops after "
     "a plain transcript - click <b>Identify speakers</b> whenever you're ready to add speaker labels.</li>"
@@ -71,10 +86,25 @@ _UK = {
     "their voiceprint for next time.</li>"
     "<li>Find the transcript in the <code>output</code> folder (one .txt per input file).</li>"
     "</ol>"
-    "Installed models, saved speakers, your Hugging Face token, theme, and interface language "
-    "are all managed from <b>Settings</b>.":
+    "Installed models, saved speakers, your Hugging Face token, theme, recording devices, and "
+    "interface language are all managed from <b>Settings</b>.":
+        "<b>Запис</b>"
         "<ol>"
-        "<li>Додай аудіо/відео файли кнопкою <b>Додати файли...</b> (або поклади їх у папку <code>input</code>).</li>"
+        "<li>У панелі запису зліва постав галочку на <b>Мікрофон</b> і/або <b>Системний звук</b>, "
+        "потім натисни <b>Record</b>. Користуйся <b>Pause</b>/<b>Resume</b> за потреби, і <b>Stop</b>, "
+        "щоб завершити - новий файл автоматично з'явиться у списку справа.</li>"
+        "<li>Системний звук завжди записується у спільному режимі (інші програми можуть користуватися "
+        "ним одночасно). Мікрофон, за бажанням, може використовувати ексклюзивний режим - у "
+        "<b>Settings</b> - він блокує іншим програмам доступ до мікрофона, поки триває запис.</li>"
+        "</ol>"
+        "<b>Відтворення</b>"
+        "<ol>"
+        "<li>Вибери файл і натисни <b>Play</b>, або двічі клацни по ньому в списку, щоб прослухати.</li>"
+        "</ol>"
+        "<b>Транскрипція</b>"
+        "<ol>"
+        "<li>Додай аудіо/відео файли кнопкою <b>Додати файли...</b> (або поклади їх у папку <code>input</code>) - "
+        "або просто запиши їх, як описано вище.</li>"
         "<li>Вибери один або кілька файлів, обери модель розпізнавання й мову.</li>"
         "<li>Натисни <b>Розпізнати мовлення</b>. Якщо автоматичне визначення спікерів вимкнено, процес "
         "зупиниться після звичайного транскрипту - натисни <b>Визначити спікерів</b>, коли будеш готовий "
@@ -83,8 +113,8 @@ _UK = {
         "голосовий відбиток на майбутнє.</li>"
         "<li>Транскрипт з'явиться в папці <code>output</code> (один .txt на кожен вхідний файл).</li>"
         "</ol>"
-        "Встановлені моделі, збережені спікери, токен Hugging Face, тема та мова інтерфейсу "
-        "керуються з <b>Settings</b>.",
+        "Встановлені моделі, збережені спікери, токен Hugging Face, тема, пристрої запису та мова "
+        "інтерфейсу керуються з <b>Settings</b>.",
     "Check for updates": "Перевірити оновлення",
     "Could not check for updates: {error}": "Не вдалося перевірити оновлення: {error}",
     "Already checking - hang on a moment.": "Перевірка вже триває - зачекай трохи.",
