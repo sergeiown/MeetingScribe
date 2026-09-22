@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from ._util import silence
+from ._util import hf_offline, silence
 from .cancellation import CancelToken, ProgressFn, StatusFn
 from .device import detect_device
 from .paths import MODELS_DIR
@@ -55,21 +55,22 @@ def diarize(wav_path: str, hf_token: str, num_speakers: Optional[int] = None, *,
     with silence():
         try:
             if diar_local.exists():
-                # Offline-first even here: without local_files_only, this still
-                # reaches out to the Hub before falling back to the local
-                # cache, which can hang for a long time (no visible error - a
-                # confirmed real report) on a slow/flaky connection, for a
-                # model that's already fully installed and needs no network at all.
+                # Offline-first: a plain from_pretrained() still reaches out to
+                # the Hub before falling back to the local cache, which can
+                # hang for a long time (no visible error - a confirmed real
+                # report) on a slow/flaky connection, for a model that's
+                # already fully installed and needs no network at all.
                 try:
-                    pipeline = Pipeline.from_pretrained(
-                        str(diar_local), token=hf_token, local_files_only=True)
+                    with hf_offline():
+                        pipeline = Pipeline.from_pretrained(str(diar_local), token=hf_token)
                 except Exception:
                     pipeline = Pipeline.from_pretrained(str(diar_local), token=hf_token)
             else:
                 try:
-                    pipeline = Pipeline.from_pretrained(
-                        "pyannote/speaker-diarization-3.1", token=hf_token,
-                        cache_dir=str(models_dir), local_files_only=True)
+                    with hf_offline():
+                        pipeline = Pipeline.from_pretrained(
+                            "pyannote/speaker-diarization-3.1", token=hf_token,
+                            cache_dir=str(models_dir))
                 except Exception:
                     pipeline = Pipeline.from_pretrained(
                         "pyannote/speaker-diarization-3.1", token=hf_token,
