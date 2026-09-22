@@ -212,6 +212,12 @@ _UK = {
     "Interface": "Інтерфейс",
     "Show a splash screen on startup": "Показувати заставку при запуску",
     "Prevent the system from sleeping while running": "Не давати системі переходити в сон під час роботи",
+    "Recording": "Запис",
+    "Exclusive mode for microphone recording": "Ексклюзивний режим для запису з мікрофона",
+    "Blocks other apps from using the microphone while recording. "
+    "Only applies to the microphone - system-audio capture is always shared.":
+        "Блокує іншим програмам доступ до мікрофона під час запису. "
+        "Стосується лише мікрофона - запис системного звуку завжди спільний.",
     "Hardware": "Обладнання",
     "CPU: {name}": "CPU: {name}",
     "GPU: {name}": "GPU: {name}",
@@ -297,12 +303,8 @@ _UK = {
     "Source:": "Джерело:",
     "Microphone": "Мікрофон",
     "System audio": "Системний звук",
+    "Microphone + System audio": "Мікрофон + системний звук",
     "Device:": "Пристрій:",
-    "Exclusive mode": "Ексклюзивний режим",
-    "System-audio capture is always shared - Windows allows multiple "
-    "apps to tap the same output stream at once.":
-        "Запис системного звуку завжди спільний - Windows дозволяє кільком "
-        "програмам одночасно знімати той самий вихідний потік.",
     "Record": "Запис",
     "Recording failed": "Помилка запису",
     "No recording device available.": "Немає доступного пристрою запису.",

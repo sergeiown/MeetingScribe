@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from .device_prefs import get_device_preference, set_device_preference
 from .hardware_icons import cpu_icon_path, gpu_icon_path
 from .i18n import tr, available_languages, get_language, set_language
+from .recording_prefs import get_exclusive_default, set_exclusive_default
 from .style import (
     apply_theme, get_theme_preference, set_theme_preference,
     get_show_splash_preference, set_show_splash_preference,
@@ -349,6 +350,7 @@ class GeneralTab(QWidget):
         layout.setContentsMargins(12, 16, 12, 16)
 
         layout.addWidget(self._build_interface_box())
+        layout.addWidget(self._build_recording_box())
         layout.addWidget(self._build_hardware_box())
         layout.addStretch()
 
@@ -393,6 +395,20 @@ class GeneralTab(QWidget):
         self._prevent_sleep_checkbox.setChecked(get_prevent_sleep_preference())
         self._prevent_sleep_checkbox.toggled.connect(set_prevent_sleep_preference)
         box_layout.addWidget(self._prevent_sleep_checkbox)
+
+        return box
+
+    def _build_recording_box(self):
+        box = QGroupBox(tr("Recording"))
+        box_layout = QVBoxLayout(box)
+
+        self._exclusive_checkbox = QCheckBox(tr("Exclusive mode for microphone recording"))
+        self._exclusive_checkbox.setChecked(get_exclusive_default())
+        self._exclusive_checkbox.setToolTip(tr(
+            "Blocks other apps from using the microphone while recording. "
+            "Only applies to the microphone - system-audio capture is always shared."))
+        self._exclusive_checkbox.toggled.connect(set_exclusive_default)
+        box_layout.addWidget(self._exclusive_checkbox)
 
         return box
 

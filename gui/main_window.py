@@ -23,7 +23,7 @@ from .recording_prefs import (
     get_recording_source, set_recording_source,
     get_last_mic_device_name, set_last_mic_device_name,
     get_last_loopback_device_name, set_last_loopback_device_name,
-    get_exclusive_default, set_exclusive_default,
+    get_exclusive_default,
 )
 from .recording_worker import RecordingController
 from .settings_dialog import SettingsDialog
@@ -157,6 +157,7 @@ class MainWindow(QMainWindow):
         self._record_source_combo = QComboBox()
         self._record_source_combo.addItem(tr("Microphone"), "microphone")
         self._record_source_combo.addItem(tr("System audio"), "system")
+        self._record_source_combo.addItem(tr("Microphone + System audio"), "both")
         self._record_source_combo.currentIndexChanged.connect(self._on_record_source_changed)
         layout.addWidget(self._record_source_combo)
 
@@ -164,10 +165,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._record_device_label)
         self._record_device_combo = QComboBox()
         layout.addWidget(self._record_device_combo)
-
-        self._exclusive_checkbox = QCheckBox(tr("Exclusive mode"))
-        self._exclusive_checkbox.toggled.connect(set_exclusive_default)
-        layout.addWidget(self._exclusive_checkbox)
 
         self._level_meter = LevelMeterWidget()
         layout.addWidget(self._level_meter)
@@ -195,12 +192,18 @@ class MainWindow(QMainWindow):
         return self._record_source_combo.currentData()
 
     def _on_record_source_changed(self, _index):
-        is_mic = self._current_record_source() == "microphone"
-        set_recording_source("microphone" if is_mic else "system")
+        source = self._current_record_source()
+        set_recording_source(source)
+        # "both" still shows a device combo, but it's for the microphone
+        # half only - the system-audio half silently uses the current
+        # default loopback device (most machines have exactly one output
+        # device anyway, and a second device picker isn't worth the extra
+        # UI for this).
+        is_mic_combo = source in ("microphone", "both")
 
         self._record_device_combo.clear()
-        self._recording_devices = core.list_microphones() if is_mic else core.list_loopback_outputs()
-        last_name = get_last_mic_device_name() if is_mic else get_last_loopback_device_name()
+        self._recording_devices = core.list_microphones() if is_mic_combo else core.list_loopback_outputs()
+        last_name = get_last_mic_device_name() if is_mic_combo else get_last_loopback_device_name()
         for d in self._recording_devices:
             self._record_device_combo.addItem(d.name, d.name)
         select_idx = self._record_device_combo.findData(last_name) if last_name else -1
@@ -211,21 +214,11 @@ class MainWindow(QMainWindow):
         self._record_device_combo.currentIndexChanged.connect(
             self._on_record_device_changed, Qt.UniqueConnection)
 
-        self._exclusive_checkbox.setEnabled(is_mic)
-        if is_mic:
-            self._exclusive_checkbox.setChecked(get_exclusive_default())
-            self._exclusive_checkbox.setToolTip("")
-        else:
-            self._exclusive_checkbox.setChecked(False)
-            self._exclusive_checkbox.setToolTip(tr(
-                "System-audio capture is always shared - Windows allows multiple "
-                "apps to tap the same output stream at once."))
-
     def _on_record_device_changed(self, _index):
         name = self._record_device_combo.currentData()
         if not name:
             return
-        if self._current_record_source() == "microphone":
+        if self._current_record_source() in ("microphone", "both"):
             set_last_mic_device_name(name)
         else:
             set_last_loopback_device_name(name)
@@ -234,6 +227,10 @@ class MainWindow(QMainWindow):
         name = self._record_device_combo.currentData()
         return next((d for d in self._recording_devices if d.name == name), None)
 
+    def _default_loopback_device(self):
+        devices = core.list_loopback_outputs()
+        return next((d for d in devices if d.is_default), devices[0] if devices else None)
+
     def _on_record_clicked(self):
         if self._recording_controller is None:
             self._start_recording()
@@ -241,17 +238,26 @@ class MainWindow(QMainWindow):
             self._stop_recording()
 
     def _start_recording(self):
+        source = self._current_record_source()
         device = self._selected_record_device()
         if device is None:
             QMessageBox.information(self, tr("Record"), tr("No recording device available."))
             return
-        is_mic = self._current_record_source() == "microphone"
+
+        devices = [(device, False)]  # (AudioDevice, is_loopback)
+        if source == "system":
+            devices = [(device, True)]
+        elif source == "both":
+            loopback_device = self._default_loopback_device()
+            if loopback_device is None:
+                QMessageBox.information(self, tr("Record"), tr("No recording device available."))
+                return
+            devices.append((loopback_device, True))
+
         core.ensure_workdirs()
         out_path = core.INPUT_DIR / f"Recording {datetime.now():%Y-%m-%d %H-%M-%S}.wav"
 
-        controller = RecordingController(
-            device, out_path, loopback=not is_mic,
-            exclusive=is_mic and self._exclusive_checkbox.isChecked())
+        controller = RecordingController(devices, out_path, exclusive=get_exclusive_default())
         controller.level.connect(self._level_meter.set_level)
         controller.error.connect(self._on_recording_error)
         controller.stopped.connect(self._on_recording_stopped)
@@ -266,7 +272,6 @@ class MainWindow(QMainWindow):
         self._record_btn.setText(tr("Stop"))
         self._record_source_combo.setEnabled(False)
         self._record_device_combo.setEnabled(False)
-        self._exclusive_checkbox.setEnabled(False)
 
     def _stop_recording(self):
         if self._recording_controller is None:
@@ -533,7 +538,7 @@ class MainWindow(QMainWindow):
         self._record_device_label.setText(tr("Device:"))
         self._record_source_combo.setItemText(0, tr("Microphone"))
         self._record_source_combo.setItemText(1, tr("System audio"))
-        self._exclusive_checkbox.setText(tr("Exclusive mode"))
+        self._record_source_combo.setItemText(2, tr("Microphone + System audio"))
         if self._recording_controller is None:
             self._record_btn.setText(tr("Record"))
 

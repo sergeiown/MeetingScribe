@@ -38,7 +38,7 @@ def set_last_loopback_device_name(name: str) -> None:
 
 
 def get_exclusive_default() -> bool:
-    return QSettings("MeetingScribe", "MeetingScribe").value(_EXCLUSIVE_KEY, False, type=bool)
+    return QSettings("MeetingScribe", "MeetingScribe").value(_EXCLUSIVE_KEY, True, type=bool)
 
 
 def set_exclusive_default(value: bool) -> None:

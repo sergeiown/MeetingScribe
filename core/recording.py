@@ -1,5 +1,6 @@
 """Live audio recording: microphone (shared or WASAPI-exclusive) and
-system-audio loopback, unified behind one Recorder interface.
+system-audio loopback, unified behind one Recorder interface - and both at
+once, mixed down into a single output file.
 
 Two backends, chosen per source, both confirmed by direct testing on real
 hardware (neither the bundled ffmpeg build nor QtMultimedia's QAudioSource
@@ -19,8 +20,17 @@ already holds it exclusively. Loopback capture of system/output audio is
 architecturally always shared in Windows - multiple apps (this one, OBS,
 Discord, ...) can all tap the same render stream simultaneously by design,
 so there is no stronger "exclusive" variant to request for it. `exclusive`
-is therefore only ever honored for microphone recording.
-"""
+is therefore only ever honored for a microphone source.
+
+Recording both sources at once mixes them (simple summed gain, not
+loudness-normalized) into one output file rather than two separate tracks -
+this app's pipeline (and its transcript UI) is built around one audio file
+per recording, and a meeting recording wants both sides of the
+conversation in the same transcript anyway. The two sources are captured
+by independently-clocked devices with no shared timeline, so they're
+aligned by wall-clock draining on a fixed tick (see _mix_and_write) rather
+than sample-accurately synchronized - adequate for speech transcription,
+not for professional multi-track work."""
 
 import logging
 import queue
@@ -35,7 +45,8 @@ import numpy as np
 
 _log = logging.getLogger(__name__)
 
-_CHUNK_SECONDS = 0.05  # loopback pull size; also a reasonable meter update grain
+_CHUNK_SECONDS = 0.05  # loopback pull size, mix-tick interval, and a reasonable meter update grain
+_MIX_GAIN = 0.7  # per source when mixing two, so simultaneous loud sources don't clip
 
 
 class RecordingError(Exception):
@@ -96,66 +107,52 @@ def list_loopback_outputs() -> list:
     return devices
 
 
-class Recorder:
-    """One recording session: create, start, poll drain_events(), stop,
-    discard. Not reusable across sessions."""
+class _SourceStream:
+    """One live capture source (microphone or loopback), pushing raw
+    float32 blocks into its own queue - mixing/writing happens outside,
+    in Recorder, so this class knows nothing about the output file."""
 
-    def __init__(self, device: AudioDevice, out_path, *,
-                 loopback: bool = False, exclusive: bool = False):
-        self._device = device
-        self._out_path = Path(out_path)
-        self._loopback = loopback
-        self._exclusive = exclusive and not loopback
-        self._events = queue.Queue()
-        self._wav = None
-        self._stream = None       # sounddevice stream (microphone path)
-        self._pull_thread = None  # soundcard pull thread (loopback path)
+    def __init__(self, device: AudioDevice, loopback: bool, exclusive: bool,
+                 channels: int, samplerate: int, on_error):
+        self.device = device
+        self.loopback = loopback
+        self.exclusive = exclusive and not loopback
+        self.channels = channels
+        self.samplerate = samplerate
+        self._on_error = on_error
+        self.blocks = queue.Queue()
+        self._stream = None
+        self._pull_thread = None
         self._stop_flag = threading.Event()
-        self._start_time = None
         self._stopped_cleanly = False
 
     def start(self) -> None:
-        channels = max(1, min(self._device.channels, 2))
-        samplerate = int(self._device.default_samplerate) or 48000
-        try:
-            self._wav = wave.open(str(self._out_path), "wb")
-            self._wav.setnchannels(channels)
-            self._wav.setsampwidth(2)
-            self._wav.setframerate(samplerate)
-        except OSError as e:
-            raise RecordingError(f"Could not create the recording file: {e}") from e
+        if self.loopback:
+            self._start_loopback()
+        else:
+            self._start_microphone()
 
-        self._start_time = time.monotonic()
-        try:
-            if self._loopback:
-                self._start_loopback(channels, samplerate)
-            else:
-                self._start_microphone(channels, samplerate)
-        except RecordingError:
-            self._close_wav()
-            raise
-
-    def _start_microphone(self, channels, samplerate):
+    def _start_microphone(self):
         import sounddevice as sd
 
-        settings = sd.WasapiSettings(exclusive=True) if self._exclusive else None
+        settings = sd.WasapiSettings(exclusive=True) if self.exclusive else None
 
         def callback(indata, frames, time_info, status):
             if status:
                 _log.debug("Recording stream status: %s", status)
-            self._write_and_meter(indata)
+            self.blocks.put(indata.copy())
 
         try:
             self._stream = sd.InputStream(
-                device=self._device.sd_index, channels=channels, samplerate=samplerate,
+                device=self.device.sd_index, channels=self.channels, samplerate=self.samplerate,
                 dtype="float32", extra_settings=settings, callback=callback,
-                finished_callback=self._on_stream_finished)
+                finished_callback=self._on_finished)
             self._stream.start()
         except Exception as e:
             self._stream = None
             raise RecordingError(_classify_open_error(e)) from e
 
-    def _start_loopback(self, channels, samplerate):
+    def _start_loopback(self):
         self._stop_flag.clear()
         ready = threading.Event()
         open_error = []
@@ -172,19 +169,19 @@ class Recorder:
             try:
                 import soundcard as sc
                 try:
-                    mic = sc.get_microphone(self._device.name, include_loopback=True)
-                    with mic.recorder(samplerate=samplerate, channels=channels) as rec:
+                    mic = sc.get_microphone(self.device.name, include_loopback=True)
+                    with mic.recorder(samplerate=self.samplerate, channels=self.channels) as rec:
                         ready.set()
-                        chunk = max(1, int(samplerate * _CHUNK_SECONDS))
+                        chunk = max(1, int(self.samplerate * _CHUNK_SECONDS))
                         while not self._stop_flag.is_set():
                             data = rec.record(numframes=chunk)
-                            self._write_and_meter(data)
+                            self.blocks.put(data)
                 except Exception as e:
                     if not ready.is_set():
                         open_error.append(e)
                         ready.set()
                     elif not self._stopped_cleanly:
-                        self._events.put(("error", f"Recording device stopped unexpectedly: {e}"))
+                        self._on_error(f"Recording device stopped unexpectedly: {e}")
             finally:
                 ctypes.windll.ole32.CoUninitialize()
 
@@ -195,19 +192,116 @@ class Recorder:
             self._pull_thread = None
             raise RecordingError(_classify_open_error(open_error[0]))
 
-    def _write_and_meter(self, block: np.ndarray) -> None:
-        peak = float(np.abs(block).max()) if block.size else 0.0
-        pcm16 = np.clip(block * 32767.0, -32768, 32767).astype(np.int16)
+    def _on_finished(self):
+        if not self._stopped_cleanly:
+            self._on_error("Recording device stopped unexpectedly.")
+
+    def drain(self) -> np.ndarray:
+        """Whatever's queued right now, concatenated into one array (may be empty)."""
+        chunks = []
+        try:
+            while True:
+                chunks.append(self.blocks.get_nowait())
+        except queue.Empty:
+            pass
+        if not chunks:
+            return np.zeros((0, self.channels), dtype=np.float32)
+        return np.concatenate(chunks, axis=0)
+
+    def stop(self):
+        self._stopped_cleanly = True
+        if self._stream is not None:
+            try:
+                self._stream.stop()
+                self._stream.close()
+            except Exception:
+                pass
+            self._stream = None
+        if self._pull_thread is not None:
+            self._stop_flag.set()
+            self._pull_thread.join(timeout=2.0)
+            self._pull_thread = None
+
+
+class Recorder:
+    """One recording session: create, start, poll drain_events(), stop,
+    discard. Not reusable across sessions."""
+
+    def __init__(self, devices, out_path, *, exclusive: bool = False):
+        """devices: [(AudioDevice, is_loopback), ...] - one entry for a
+        single source, two for simultaneous mic+system (mixed down to one
+        output file, see module docstring). exclusive only ever applies to
+        a microphone entry."""
+        self._device_specs = list(devices)
+        self._out_path = Path(out_path)
+        self._exclusive = exclusive
+        self._sources = []
+        self._events = queue.Queue()
+        self._wav = None
+        self._mix_thread = None
+        self._stop_flag = threading.Event()
+        self._start_time = None
+
+    def start(self) -> None:
+        channels = max(1, min(max(d.channels for d, _ in self._device_specs), 2))
+        samplerate = int(self._device_specs[0][0].default_samplerate) or 48000
+
+        try:
+            self._wav = wave.open(str(self._out_path), "wb")
+            self._wav.setnchannels(channels)
+            self._wav.setsampwidth(2)
+            self._wav.setframerate(samplerate)
+        except OSError as e:
+            raise RecordingError(f"Could not create the recording file: {e}") from e
+
+        self._sources = [
+            _SourceStream(device, loopback, self._exclusive, channels, samplerate,
+                          on_error=lambda msg: self._events.put(("error", msg)))
+            for device, loopback in self._device_specs
+        ]
+        started = []
+        try:
+            for src in self._sources:
+                src.start()
+                started.append(src)
+        except RecordingError:
+            for src in started:
+                src.stop()
+            self._sources = []
+            self._close_wav()
+            raise
+
+        self._start_time = time.monotonic()
+        self._stop_flag.clear()
+        self._mix_thread = threading.Thread(target=self._mix_loop, daemon=True)
+        self._mix_thread.start()
+
+    def _mix_loop(self):
+        while not self._stop_flag.is_set():
+            time.sleep(_CHUNK_SECONDS)
+            self._mix_and_write()
+        self._mix_and_write()  # final drain of whatever arrived since the last tick
+
+    def _mix_and_write(self):
+        blocks = [src.drain() for src in self._sources]
+        if len(blocks) == 1:
+            mixed = blocks[0]
+        else:
+            n = min(b.shape[0] for b in blocks)
+            if n == 0:
+                mixed = np.zeros((0, blocks[0].shape[1]), dtype=np.float32)
+            else:
+                mixed = sum(b[:n] * _MIX_GAIN for b in blocks)
+        if mixed.size == 0:
+            return
+        peak = float(np.abs(mixed).max())
+        pcm16 = np.clip(mixed * 32767.0, -32768, 32767).astype(np.int16)
         if self._wav is not None:
             try:
                 self._wav.writeframes(pcm16.tobytes())
             except Exception:
                 pass  # already closed by stop()
         self._events.put(("level", peak))
-
-    def _on_stream_finished(self):
-        if not self._stopped_cleanly:
-            self._events.put(("error", "Recording device stopped unexpectedly."))
 
     def drain_events(self) -> list:
         """[("level", float) | ("error", str), ...] accumulated since the last call."""
@@ -223,18 +317,13 @@ class Recorder:
         return time.monotonic() - self._start_time if self._start_time else 0.0
 
     def stop(self) -> Path:
-        self._stopped_cleanly = True
-        if self._stream is not None:
-            try:
-                self._stream.stop()
-                self._stream.close()
-            except Exception:
-                pass
-            self._stream = None
-        if self._pull_thread is not None:
-            self._stop_flag.set()
-            self._pull_thread.join(timeout=2.0)
-            self._pull_thread = None
+        self._stop_flag.set()
+        if self._mix_thread is not None:
+            self._mix_thread.join(timeout=3.0)
+            self._mix_thread = None
+        for src in self._sources:
+            src.stop()
+        self._sources = []
         self._close_wav()
         return self._out_path
 
@@ -248,4 +337,4 @@ class Recorder:
 
     @property
     def is_recording(self) -> bool:
-        return self._stream is not None or self._pull_thread is not None
+        return self._mix_thread is not None
