@@ -2,6 +2,7 @@
 
 import shutil
 import sys
+import threading
 import time
 
 import core
@@ -108,6 +109,14 @@ def main():
     core.ensure_workdirs()
     core.cleanup_update_downloads()
     core.init_logger()
+
+    # Pre-warms core.detect_hardware_info()'s cache in the background so
+    # it's already done by the time Settings is first opened - confirmed by
+    # direct timing that on a machine with no NVIDIA GPU, its WMI fallback
+    # (a whole spawned PowerShell process) alone took ~1.9s, which was
+    # nearly the entire delay in opening the dialog. Thread-safe: it's pure
+    # subprocess calls, no Qt/GUI object touched from this thread.
+    threading.Thread(target=core.detect_hardware_info, daemon=True).start()
 
     # The mandatory model installs unconditionally like pip deps, no confirmation
     # dialog; both share one combined progress window rather than separate ones.

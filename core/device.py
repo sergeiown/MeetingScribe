@@ -3,6 +3,7 @@
 import os
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -122,13 +123,41 @@ def detect_hardware_info():
     """(cpu_name, gpu_name_or_None, gpu_supported) - torch-free, safe for the
     main GUI process. gpu_supported is True only for NVIDIA (the only kind
     this app's CUDA acceleration can use). Display only - detect_device()
-    decides the actual device used for a run."""
-    cpu_name = _get_cpu_name()
-    nvidia_name = nvidia_gpu_name()
-    if nvidia_name:
-        return cpu_name, nvidia_name, True
-    others = _any_gpu_names()
-    return cpu_name, (others[0] if others else None), False
+    decides the actual device used for a run.
+
+    Cached for the process lifetime: on a machine with no NVIDIA GPU, the
+    fallback below spawns a whole PowerShell process to query WMI for
+    *any* video controller - confirmed by direct timing to take ~1.9s on
+    its own, which is nearly the entire delay in opening Settings (it
+    previously ran fresh every single time the dialog was built). Hardware
+    doesn't change while the app is running, so there's nothing to gain by
+    re-querying it every time the user reopens Settings.
+
+    A lock guards the actual computation (not just the cache read) since
+    this is deliberately also kicked off from a background thread right at
+    startup to pre-warm the cache before Settings is ever opened - without
+    it, a call from the GUI thread arriving before that background call
+    finishes would just redundantly re-run the same slow subprocess calls
+    instead of waiting for the one already in flight."""
+    cached = getattr(detect_hardware_info, "_cache", None)
+    if cached is not None:
+        return cached
+    with _hardware_info_lock:
+        cached = getattr(detect_hardware_info, "_cache", None)
+        if cached is not None:
+            return cached
+        cpu_name = _get_cpu_name()
+        nvidia_name = nvidia_gpu_name()
+        if nvidia_name:
+            result = (cpu_name, nvidia_name, True)
+        else:
+            others = _any_gpu_names()
+            result = (cpu_name, (others[0] if others else None), False)
+        detect_hardware_info._cache = result
+        return result
+
+
+_hardware_info_lock = threading.Lock()
 
 
 def set_sleep_prevention(active: bool) -> None:

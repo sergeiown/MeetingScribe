@@ -264,10 +264,11 @@ _UK = {
     "combination both starts and stops a recording.":
         "Працює по всій системі, навіть коли активна інша програма (наприклад, Teams) - те саме "
         "сполучення і починає, і зупиняє запис.",
-    "Off by default. Click the field above, then press the key combination "
-    "you want - it's captured immediately, no need to press Enter.":
-        "Вимкнено за замовчуванням. Натисни на поле вище, тоді натисни потрібне сполучення клавіш - "
-        "воно фіксується одразу, Enter не потрібен.",
+    "Not set - click to set": "Не встановлено - натисни, щоб встановити",
+    "Set shortcut": "Встановити сполучення",
+    "Press the key combination you want, then click OK.":
+        "Натисни потрібне сполучення клавіш, тоді натисни OK.",
+    "OK": "OK",
     "Clear": "Очистити",
     "Hardware": "Обладнання",
     "CPU: {name}": "CPU: {name}",

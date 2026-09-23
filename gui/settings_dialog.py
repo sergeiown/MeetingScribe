@@ -346,10 +346,53 @@ class SpeakersTab(QWidget):
             QMessageBox.warning(self, tr("Import failed"), tr("Could not read the import file:\n\n{error}", error=str(e)))
 
 
+class _HotkeyCaptureDialog(QDialog):
+    """Small modal popup for capturing exactly one key combination -
+    replaces an always-live inline field, which read as unclear about
+    whether/when it was actually listening for a key press."""
+
+    def __init__(self, current: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("Set shortcut"))
+        self.setModal(True)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(tr("Press the key combination you want, then click OK.")))
+        self._edit = QKeySequenceEdit(QKeySequence(current))
+        try:
+            self._edit.setMaximumSequenceLength(1)
+        except AttributeError:
+            pass  # older PySide6 - harmless, only the first chord is ever used anyway
+        layout.addWidget(self._edit)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        ok_btn = QPushButton(tr("OK"))
+        ok_btn.clicked.connect(self.accept)
+        btn_row.addWidget(ok_btn)
+        cancel_btn = QPushButton(tr("Cancel"))
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+        layout.addLayout(btn_row)
+        self._edit.setFocus()
+
+    def result_sequence(self) -> str:
+        return self._edit.keySequence().toString()
+
+
 class GeneralTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Scrolls internally instead of forcing the dialog to grow to fit
+        # its content - this tab has kept growing (recording section,
+        # hotkey field, ...) and the dialog must never end up taller than
+        # the main window, whatever the content ends up needing.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        content = QWidget()
+        layout = QVBoxLayout(content)
         # Generous gap between the two group boxes; each keeps its own
         # internal spacing tighter (label snug against its control).
         layout.setSpacing(22)
@@ -359,6 +402,9 @@ class GeneralTab(QWidget):
         layout.addWidget(self._build_recording_box())
         layout.addWidget(self._build_hardware_box())
         layout.addStretch()
+
+        scroll.setWidget(content)
+        outer_layout.addWidget(scroll)
 
     def _build_interface_box(self):
         box = QGroupBox(tr("Interface"))
@@ -461,31 +507,33 @@ class GeneralTab(QWidget):
 
         hotkey_row = QHBoxLayout()
         hotkey_row.addWidget(QLabel(tr("Start/stop recording shortcut:")))
-        self._hotkey_edit = QKeySequenceEdit()
-        try:
-            self._hotkey_edit.setMaximumSequenceLength(1)
-        except AttributeError:
-            pass  # older PySide6 - harmless, only the first chord is ever used anyway
-        self._hotkey_edit.setKeySequence(QKeySequence(get_hotkey()))
-        self._hotkey_edit.setToolTip(tr(
+        self._hotkey_display = QPushButton()
+        self._hotkey_display.setToolTip(tr(
             "Works system-wide, even while another app (like Teams) has focus - the same "
             "combination both starts and stops a recording."))
-        self._hotkey_edit.keySequenceChanged.connect(
-            lambda seq: set_hotkey(seq.toString()))
-        hotkey_row.addWidget(self._hotkey_edit, stretch=1)
+        self._hotkey_display.clicked.connect(self._on_hotkey_clicked)
+        self._update_hotkey_display()
+        hotkey_row.addWidget(self._hotkey_display, stretch=1)
         hotkey_clear_btn = QPushButton(tr("Clear"))
-        hotkey_clear_btn.clicked.connect(
-            lambda: self._hotkey_edit.setKeySequence(QKeySequence(DEFAULT_HOTKEY)))
+        hotkey_clear_btn.clicked.connect(self._on_hotkey_clear)
         hotkey_row.addWidget(hotkey_clear_btn)
         box_layout.addLayout(hotkey_row)
 
-        hotkey_hint = QLabel(tr("Off by default. Click the field above, then press the key combination "
-                                 "you want - it's captured immediately, no need to press Enter."))
-        hotkey_hint.setWordWrap(True)
-        hotkey_hint.setProperty("hint", True)
-        box_layout.addWidget(hotkey_hint)
-
         return box
+
+    def _update_hotkey_display(self):
+        seq = get_hotkey()
+        self._hotkey_display.setText(seq if seq else tr("Not set - click to set"))
+
+    def _on_hotkey_clicked(self):
+        dlg = _HotkeyCaptureDialog(get_hotkey(), self)
+        if dlg.exec() == QDialog.Accepted:
+            set_hotkey(dlg.result_sequence())
+            self._update_hotkey_display()
+
+    def _on_hotkey_clear(self):
+        set_hotkey(DEFAULT_HOTKEY)
+        self._update_hotkey_display()
 
     def _on_exclusive_toggled(self, checked: bool):
         set_exclusive_default(checked)
@@ -568,7 +616,10 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Settings"))
-        self.resize(780, 700)
+        # Never taller than the main window itself - each tab that might
+        # not fit scrolls internally instead (see GeneralTab, ModelsTab).
+        height = min(700, parent.height()) if parent is not None else 700
+        self.resize(780, height)
         layout = QVBoxLayout(self)
 
         tabs = QTabWidget()
