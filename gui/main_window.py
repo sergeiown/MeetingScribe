@@ -435,6 +435,13 @@ class MainWindow(QMainWindow):
         self._mic_checkbox.setEnabled(False)
         self._system_checkbox.setEnabled(False)
         self._taskbar_overlay.set_recording(True)
+        # Recording and playback both want the same audio devices - keep
+        # playback fully stopped (not just paused) for the whole recording,
+        # not just re-disabled, so it can't be silently resumed from code.
+        self._media_player.stop()
+        self._media_player.setSource(QUrl())
+        self._playback_row_widget.setVisible(False)
+        self._refresh_play_button()
 
     def _reset_record_ui(self):
         self._mic_checkbox.setEnabled(True)
@@ -472,6 +479,7 @@ class MainWindow(QMainWindow):
         self._taskbar_overlay.set_recording(False)
         self._refresh_file_list(select_all=False)
         self._select_file_by_path(Path(path_str))
+        self._refresh_play_button()
 
     def _update_elapsed_label(self):
         if self._recording_controller is None:
@@ -1076,9 +1084,14 @@ class MainWindow(QMainWindow):
     # --- playback ------------------------------------------------------
 
     def _refresh_play_button(self):
+        if self._recording_controller is not None:
+            self._play_btn.setEnabled(False)
+            return
         self._play_btn.setEnabled(len(self._selected_files()) == 1)
 
     def _on_file_double_clicked(self, _item):
+        if self._recording_controller is not None:
+            return
         files = self._selected_files()
         if len(files) == 1:
             self._play_file(files[0])
