@@ -39,11 +39,16 @@ avoids this problem - it never trusts a short sample of device timing, and
 it never hand-rolls a resampler. Every source's raw captured audio is
 written untouched to its own temporary file during the session; at
 stop(), each source's *true* rate is computed from the one measurement
-that actually is reliable - total frames captured divided by the
-recording's total real (wall-clock, pause-excluded) duration, averaged
-over the entire session rather than a short window - and then the whole
-per-source signal is resampled exactly once, with scipy.signal.resample
-(a real, tested DSP routine, not a hand-written interpolation loop), onto
+that actually is reliable - for a microphone, PortAudio's own per-callback
+device-clock timestamps (time_info.currentTime), spanning the entire
+session rather than a short window, which sidesteps Python-side wall-clock
+jitter (thread wake-up latency, GIL scheduling) entirely; loopback has no
+equivalent timestamp available, so it falls back to wall-clock timing
+(see Recorder.stop()). The whole per-source signal is then resampled
+exactly once with scipy.signal.resample_poly - a proper polyphase FIR
+resampler with anti-aliasing, the function actually meant for real,
+non-periodic audio like speech (unlike the FFT-based resample(), which
+assumes one periodic cycle and can ring/distort on real recordings) - onto
 a fixed target rate. Only then are the (now equally and correctly timed)
 sources mixed and written to the final WAV. This is deliberately the
 simplest structure that is still correct: one clean measurement per
@@ -61,7 +66,9 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from scipy.signal import resample
+from fractions import Fraction
+
+from scipy.signal import resample_poly
 
 _log = logging.getLogger(__name__)
 
@@ -158,6 +165,14 @@ class _SourceStream:
         self._pull_thread = None
         self._stop_flag = threading.Event()
         self._stopped_cleanly = False
+        # Microphone only: PortAudio's own per-callback device-clock
+        # timestamp, spanning first callback to most recent - see
+        # Recorder._load_and_resample's docstring for why this replaces
+        # Python-side wall-clock timing for the rate measurement wherever
+        # it's available. Loopback (soundcard) exposes no equivalent
+        # timestamp through its simple record() API, so it has none.
+        self._first_device_time = None
+        self._last_device_time = None
 
     def start(self) -> None:
         if self.loopback:
@@ -173,6 +188,9 @@ class _SourceStream:
         def callback(indata, frames, time_info, status):
             if status:
                 _log.debug("Recording stream status: %s", status)
+            if self._first_device_time is None:
+                self._first_device_time = time_info.currentTime
+            self._last_device_time = time_info.currentTime
             self.blocks.put(indata.copy())
 
         try:
@@ -228,6 +246,14 @@ class _SourceStream:
     def _on_finished(self):
         if not self._stopped_cleanly:
             self._on_error("Recording device stopped unexpectedly.")
+
+    def device_duration(self) -> Optional[float]:
+        """Real elapsed time spanned by this source's own callbacks,
+        measured on PortAudio's device clock - None if unavailable
+        (loopback, or a mic source that never received a callback)."""
+        if self._first_device_time is None or self._last_device_time is None:
+            return None
+        return max(0.0, self._last_device_time - self._first_device_time)
 
     def drain(self) -> np.ndarray:
         """Whatever's queued right now, concatenated into one array (may be empty)."""
@@ -383,14 +409,22 @@ class Recorder:
         if self._mix_thread is not None:
             self._mix_thread.join(timeout=3.0)
             self._mix_thread = None
+
+        # Captured before src.stop() (harmless either way, but keeps the
+        # snapshot unambiguous) - PortAudio's own device-clock span for
+        # this source's callbacks, when available (microphone only; see
+        # _SourceStream.device_duration). This bypasses Python-side
+        # wall-clock timing (thread wake-up latency, GIL scheduling)
+        # entirely for the rate measurement, which the fallback below
+        # cannot - confirmed the fallback alone still left a few percent of
+        # residual error even after averaging over a whole session.
+        wall_clock_duration = self.elapsed_seconds()
+        device_durations = [src.device_duration() for src in self._sources]
+
         for src in self._sources:
             src.stop()
         self._sources = []
 
-        # The one number that's actually reliable: total frames captured
-        # over the *entire* active (pause-excluded) session, not a short
-        # sample of it - see module docstring.
-        active_duration = self.elapsed_seconds()
         for f in self._raw_files:
             try:
                 f.close()
@@ -399,7 +433,17 @@ class Recorder:
         self._raw_files = []
 
         resampled = []
-        for path, frames in zip(self._raw_paths, self._raw_frame_counts):
+        for path, frames, device_duration in zip(self._raw_paths, self._raw_frame_counts, device_durations):
+            if device_duration is not None:
+                # device_duration spans the source's *entire* callback
+                # history including any paused stretch (the stream stays
+                # open through pause - see pause()); _paused_accum is the
+                # matching wall-clock paused duration, close enough to
+                # subtract here since pause spans aren't what's being
+                # precision-measured.
+                active_duration = max(0.0, device_duration - self._paused_accum)
+            else:
+                active_duration = wall_clock_duration
             resampled.append(self._load_and_resample(path, frames, active_duration))
             try:
                 path.unlink()
@@ -418,8 +462,13 @@ class Recorder:
         true_rate = frames_written / active_duration
         if not (8000 <= true_rate <= 192000):
             return raw  # implausible measurement - use as captured rather than distort it further
-        target_frames = max(1, round(raw.shape[0] * _TARGET_RATE / true_rate))
-        return resample(raw, target_frames, axis=0).astype(np.float32)
+        # resample_poly (polyphase FIR, proper anti-aliasing), not the
+        # FFT-based resample(): the latter treats the signal as one
+        # periodic cycle, which is wrong for real, non-periodic speech and
+        # shows up as ringing/artifacts - resample_poly is the function
+        # actually meant for real-world audio like this.
+        ratio = Fraction(_TARGET_RATE / true_rate).limit_denominator(10_000)
+        return resample_poly(raw, ratio.numerator, ratio.denominator, axis=0).astype(np.float32)
 
     def _mix_final(self, sources: list) -> np.ndarray:
         n = min(s.shape[0] for s in sources)
