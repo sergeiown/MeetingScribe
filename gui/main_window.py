@@ -1319,6 +1319,12 @@ class MainWindow(QMainWindow):
         self._transcribe_btn.setEnabled(True)
         self._cancel_btn.setEnabled(False)
         self._worker = None
+        # setRange(0, 0) puts a QProgressBar into a continuously-animating
+        # busy state - left running otherwise, since nothing else stops it
+        # once the worker that was feeding it real progress is gone.
+        self._progress_bar.setRange(0, 100)
+        self._progress_bar.setValue(0)
+        self._progress_bar.setFormat("")
         self._refresh_diarize_button()
 
     def closeEvent(self, event):
