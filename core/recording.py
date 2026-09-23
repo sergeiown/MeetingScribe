@@ -1,52 +1,62 @@
-"""Live audio recording: microphone and system-audio loopback, unified
-behind one Recorder interface - and both at once, mixed down into a
-single output file.
+"""Live audio recording: microphone (shared or WASAPI-exclusive) and
+system-audio loopback, unified behind one Recorder interface - and both at
+once, mixed down into a single output file.
 
-Three backends now, chosen per source and mode:
-- Microphone, shared mode (the default): ffmpeg itself, via its dshow
-  input (confirmed by direct testing to see and open this app's actual
-  microphones by the same name sounddevice reports). This is a deliberate
-  change from an earlier all-Python design that kept trying to correct
-  WASAPI's own timing quirks itself (calibration windows, then per-tick
-  resampling, then whole-session resampling with a real DSP library) and
-  kept surfacing a new artifact each time. The user's own side-by-side
-  test settled it: OBS, recording the same microphone, had none of these
-  problems - and OBS does not hand-roll WASAPI capture either, it goes
-  through a mature capture pipeline (in ffmpeg's case, dshow + its own
-  libswresample) that already solves this correctly. Recorder's job for
-  this path is now just lifecycle management (start/pause/resume/stop of
-  an ffmpeg subprocess) and live level metering (via a second, parallel,
-  shared-mode sounddevice stream used only to peek at levels - WASAPI
-  shared mode allows multiple simultaneous opens by design, so this never
-  competes with ffmpeg's own capture) - not audio math.
-- Microphone, exclusive mode: kept as a secondary, legacy path via
-  sounddevice's WasapiSettings(exclusive=True) - soundcard's own
-  exclusive_mode reliably raises "invalid argument" on real hardware, so
-  sounddevice is the only one of the two that supports it at all. ffmpeg's
-  dshow has no equivalent to WASAPI exclusive access, so this mode simply
-  is not available through it. Real hardware has shown this path's actual
-  throughput can differ substantially from what it reports (confirmed:
-  ~66-71 kHz on a stream opened at 48000 Hz) - see _load_and_resample for
-  the correction still applied here. Because of that unreliability, this
-  is presented in the UI as a secondary option, not the default.
+Two backends, chosen per source, both confirmed by direct testing on real
+hardware:
+- Microphone: sounddevice, i.e. WASAPI directly (shared by default,
+  optionally sd.WasapiSettings(exclusive=True)). An ffmpeg/dshow-based
+  microphone engine was tried in between and reverted: it looked
+  attractive (mature, external capture pipeline, matched the user's own
+  side-by-side OBS comparison) but direct testing with a real Bluetooth
+  headset used as *both* the microphone and the system-audio loopback
+  target at once showed the dshow session degrading the microphone
+  signal substantially, while a plain WASAPI session alongside the same
+  loopback showed no such degradation and zero PortAudio-reported
+  overflow/error status - DirectShow's audio capture (superseded by
+  WASAPI for audio since Vista) evidently negotiates a Bluetooth
+  Hands-Free-Profile connection worse than a native WASAPI session does,
+  which is also almost certainly why OBS (WASAPI-based, not DirectShow)
+  never showed this problem on the same hardware in the user's own test.
+  WASAPI is therefore the one microphone backend, in both modes.
 - System-audio loopback: soundcard, via sc.get_microphone(name,
-  include_loopback=True) - unchanged. sounddevice's installed build has no
-  loopback support at all, and ffmpeg's bundled build has no WASAPI-loopback
-  demuxer either (confirmed: `ffmpeg -devices` lists dshow/gdigrab/openal/
-  vfwcap/lavfi/libcdio, no wasapi) - dshow's usual loopback route ("Stereo
-  Mix") is a legacy device that's absent or disabled on most modern
-  hardware, so it isn't a real alternative either.
+  include_loopback=True). sounddevice's installed build has no loopback
+  support at all (no such parameter exists on its WasapiSettings), and
+  ffmpeg's bundled build has no WASAPI-loopback demuxer either (confirmed:
+  `ffmpeg -devices` lists dshow/gdigrab/openal/vfwcap/lavfi/libcdio, no
+  wasapi) - dshow's usual loopback route ("Stereo Mix") is a legacy
+  device that's absent or disabled on most modern hardware.
 
 Exclusive mode is only ever honored for a microphone entry - loopback
 capture of system/output audio is architecturally always shared in
 Windows (OBS, Discord, this app, ... can all tap the same render stream
 simultaneously by design), so there's no stronger "exclusive" variant to
-request for it."""
+request for it.
+
+On some real hardware, a WASAPI *exclusive-mode* stream's actual delivered
+throughput does not match the rate it was opened with/reports (confirmed
+by direct testing: one real microphone's exclusive-mode stream, opened at
+a requested/reported 48000 Hz, actually delivered audio at ~66000-71000 Hz,
+varying between separate recordings by a few percent). Shared mode did
+not show this (its small ~2% timing error matched plain measurement
+noise). Rather than branch behavior on the mode, every source is measured
+and corrected the same way: PortAudio's own per-callback device-clock
+timestamp (time_info.currentTime) gives each microphone's true rate
+without any Python-side wall-clock jitter (thread wake-up latency, GIL
+scheduling) - confirmed far tighter than measuring wall-clock time around
+the recording (0.0-0.2% error vs several percent). Loopback has no
+equivalent timestamp, so it falls back to wall-clock timing. Each
+source's raw captured audio is written untouched to its own temporary
+file during the session and resampled exactly once at stop(), with
+scipy.signal.resample_poly - a proper polyphase FIR resampler with
+anti-aliasing, meant for real, non-periodic audio like speech (unlike the
+FFT-based resample(), which assumes one periodic cycle and can ring/
+distort on real recordings) - onto a fixed target rate. Only then are the
+(now equally and correctly timed) sources mixed and written to the final
+WAV."""
 
 import logging
 import queue
-import shutil
-import subprocess
 import tempfile
 import threading
 import time
@@ -59,16 +69,11 @@ from typing import Optional
 import numpy as np
 from scipy.signal import resample_poly
 
-from .audio import FFMPEG
-
 _log = logging.getLogger(__name__)
 
-_CHUNK_SECONDS = 0.05  # live meter update grain, and the legacy-path mix tick
+_CHUNK_SECONDS = 0.05  # mix-tick interval and meter update grain
 _MIX_GAIN = 0.7  # per source when mixing two, so simultaneous loud sources don't clip
 _TARGET_RATE = 48000  # every recording ends up at this rate, regardless of what the device actually did
-_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-_FFMPEG_STOP_TIMEOUT = 5.0  # graceful "q" stop before escalating to terminate()
-_FFMPEG_STARTUP_GRACE = 0.5  # after spawning, before trusting ffmpeg opened the device cleanly
 _DEVICE_OPEN_RETRIES = 3  # see _start_with_retry - rides out transient device-busy failures
 _DEVICE_OPEN_RETRY_DELAY = 0.4
 
@@ -117,16 +122,6 @@ def _classify_open_error(e: Exception) -> str:
     if "device unavailable" in low or "unanticipated host error" in low:
         return "This device is already in use by another app."
     return f"Could not open this device: {e}"
-
-
-def _classify_ffmpeg_error(stderr_text: str) -> str:
-    low = stderr_text.lower()
-    if "could not find audio" in low or "could not enumerate" in low or "no such" in low:
-        return "This device could not be found - it may have been disconnected."
-    if "error opening input" in low or "i/o error" in low or "immediate exit" in low:
-        return "This device is already in use by another app, or could not be opened."
-    tail = stderr_text.strip().splitlines()[-1:] if stderr_text.strip() else []
-    return "Could not open the microphone." + (f" ({tail[0][:200]})" if tail else "")
 
 
 def list_microphones() -> list:
@@ -184,173 +179,10 @@ def resolve_device(devices: list, preferred_name):
     return next((d for d in devices if d.is_default), devices[0] if devices else None)
 
 
-def _load_wav_as_array(path: Path, channels: int) -> np.ndarray:
-    if not path.exists() or path.stat().st_size == 0:
-        return np.zeros((0, channels), dtype=np.float32)
-    with wave.open(str(path), "rb") as wf:
-        n = wf.getnframes()
-        raw = wf.readframes(n)
-    if not raw:
-        return np.zeros((0, channels), dtype=np.float32)
-    return np.frombuffer(raw, dtype=np.int16).reshape(-1, channels).astype(np.float32) / 32768.0
-
-
-def _concat_wav_segments(segments: list, out_path: Path, channels: int) -> None:
-    """Losslessly joins WAV segments (all already the same format - ffmpeg
-    wrote every one of them itself) via ffmpeg's own concat demuxer - the
-    plain, standard way to join a pause/resume session's pieces without
-    re-encoding. A single segment is just copied; no segments (recording
-    stopped before ffmpeg ever produced one) leaves an empty placeholder."""
-    existing = [p for p in segments if p.exists() and p.stat().st_size > 0]
-    if not existing:
-        wf = wave.open(str(out_path), "wb")
-        wf.setnchannels(channels)
-        wf.setsampwidth(2)
-        wf.setframerate(_TARGET_RATE)
-        wf.close()
-        return
-    if len(existing) == 1:
-        shutil.copyfile(existing[0], out_path)
-        return
-    list_path = existing[0].parent / f"{out_path.stem}_concat_list.txt"
-    with open(list_path, "w", encoding="utf-8") as f:
-        for p in existing:
-            f.write(f"file '{p.name}'\n")
-    subprocess.run(
-        [FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", str(list_path), "-c", "copy", str(out_path)],
-        cwd=str(existing[0].parent), capture_output=True, creationflags=_CREATE_NO_WINDOW)
-    try:
-        list_path.unlink()
-    except OSError:
-        pass
-
-
-class _FfmpegMicCapture:
-    """Segmented microphone capture via ffmpeg's own dshow input - the
-    default/primary microphone engine (see module docstring). ffmpeg owns
-    capture, resampling (via -ar/-ac), and file writing end-to-end using
-    its own mature code; this class only manages *when* it's recording.
-    Pause/resume works by ending the current segment and starting a new
-    one (ffmpeg has no live pause signal for a running capture) - stop()
-    hands back every segment path for the caller to concatenate."""
-
-    def __init__(self, device_name: str, channels: int, workdir: Path):
-        self.device_name = device_name
-        self.channels = channels
-        self._workdir = workdir
-        self._segments = []
-        self._proc = None
-        self._stderr_lines = []
-
-    def _spawn_segment(self) -> None:
-        seg_path = self._workdir / f"mic_seg_{len(self._segments)}.wav"
-        args = [FFMPEG, "-y", "-f", "dshow", "-i", f"audio={self.device_name}",
-                "-ar", str(_TARGET_RATE), "-ac", str(self.channels),
-                "-acodec", "pcm_s16le", str(seg_path)]
-        self._stderr_lines = []
-        self._proc = subprocess.Popen(
-            args, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE, creationflags=_CREATE_NO_WINDOW)
-
-        def read_stderr(proc=self._proc):
-            try:
-                for line in proc.stderr:
-                    self._stderr_lines.append(line.decode("utf-8", "replace"))
-            except Exception:
-                pass
-
-        threading.Thread(target=read_stderr, daemon=True).start()
-        self._segments.append(seg_path)
-
-    def start(self) -> None:
-        if not FFMPEG:
-            raise RecordingError("ffmpeg was not found - it's required for microphone recording.")
-        self._spawn_segment()
-        time.sleep(_FFMPEG_STARTUP_GRACE)
-        if self._proc.poll() is not None:
-            raise RecordingError(_classify_ffmpeg_error("".join(self._stderr_lines)))
-
-    def _stop_current_segment(self) -> None:
-        proc, self._proc = self._proc, None
-        if proc is None:
-            return
-        try:
-            if proc.stdin:
-                proc.stdin.write(b"q")
-                proc.stdin.flush()
-        except Exception:
-            pass
-        try:
-            proc.wait(timeout=_FFMPEG_STOP_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            proc.terminate()
-            try:
-                proc.wait(timeout=2.0)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-
-    def pause(self) -> None:
-        self._stop_current_segment()
-
-    def resume(self) -> None:
-        self._spawn_segment()
-
-    def finish(self) -> list:
-        """Stops the current segment (if any) and returns every segment path."""
-        self._stop_current_segment()
-        return self._segments
-
-
-class _MeterOnlyMicStream:
-    """A second, parallel, shared-mode microphone stream used only to
-    drive the live level meter while ffmpeg owns the actual recording -
-    WASAPI shared mode allows multiple simultaneous opens by design, so
-    this never competes with ffmpeg's own capture. Best-effort: metering
-    is a nice-to-have, never allowed to fail or block the real recording."""
-
-    def __init__(self, sd_index: Optional[int], channels: int, samplerate: int):
-        self.sd_index = sd_index
-        self.channels = channels
-        self.samplerate = samplerate
-        self._stream = None
-        self._peak = 0.0
-        self._lock = threading.Lock()
-
-    def start(self) -> None:
-        import sounddevice as sd
-
-        def callback(indata, frames, time_info, status):
-            peak = float(np.abs(indata).max()) if indata.size else 0.0
-            with self._lock:
-                self._peak = max(self._peak, peak)
-
-        try:
-            self._stream = sd.InputStream(
-                device=self.sd_index, channels=self.channels, samplerate=self.samplerate,
-                dtype="float32", callback=callback)
-            self._stream.start()
-        except Exception:
-            self._stream = None
-
-    def take_peak(self) -> float:
-        with self._lock:
-            peak, self._peak = self._peak, 0.0
-        return peak
-
-    def stop(self) -> None:
-        if self._stream is not None:
-            try:
-                self._stream.stop()
-                self._stream.close()
-            except Exception:
-                pass
-            self._stream = None
-
-
 class _SourceStream:
-    """One live capture source for the legacy path (exclusive-mode
-    microphone, or loopback), pushing raw float32 blocks into its own
-    queue - mixing/writing happens outside, in Recorder."""
+    """One live capture source (microphone or loopback), pushing raw
+    float32 blocks into its own queue - mixing/writing happens outside,
+    in Recorder, so this class knows nothing about the output file."""
 
     def __init__(self, device: AudioDevice, loopback: bool, exclusive: bool,
                  channels: int, samplerate: int, on_error):
@@ -366,8 +198,9 @@ class _SourceStream:
         self._stop_flag = threading.Event()
         self._stopped_cleanly = False
         # Microphone only: PortAudio's own per-callback device-clock
-        # timestamp, spanning first callback to most recent - removes
-        # Python-side wall-clock jitter from the rate measurement. Loopback
+        # timestamp, spanning first callback to most recent - see module
+        # docstring for why this replaces Python-side wall-clock timing
+        # for the rate measurement wherever it's available. Loopback
         # (soundcard) exposes no equivalent timestamp, so it has none.
         self._first_device_time = None
         self._last_device_time = None
@@ -484,15 +317,12 @@ class Recorder:
     """One recording session: create, start, poll drain_events(), stop,
     discard. Not reusable across sessions.
 
-    Each device_spec gets its own engine, chosen per module docstring:
-    a non-exclusive microphone gets the ffmpeg-owned path (_FfmpegMicCapture
-    + a meter-only stream); an exclusive microphone or a loopback source
-    gets the legacy sounddevice/soundcard path (_SourceStream, writing raw
-    audio to its own temp file, resampled once at stop() - see
-    _load_and_resample). Every engine's final signal ends up as one
-    float32 array at _TARGET_RATE, in the same order as device_specs, so
-    stop()'s mixing step and drain_events()'s per-source level order don't
-    need to know which engine produced which array."""
+    Nothing is mixed or rate-corrected while recording - each source's raw
+    captured audio streams straight to its own temporary file (bounded
+    memory regardless of recording length, same crash-safety profile as
+    writing the final file incrementally would have). All the real work
+    (measuring each source's true rate, resampling, mixing) happens once,
+    in stop() - see module docstring for why."""
 
     def __init__(self, devices, out_path, *, exclusive: bool = False):
         """devices: [(AudioDevice, is_loopback), ...] - one entry for a
@@ -502,6 +332,7 @@ class Recorder:
         self._device_specs = list(devices)
         self._out_path = Path(out_path)
         self._exclusive = exclusive
+        self._sources = []
         self._events = queue.Queue()
         self._mix_thread = None
         self._stop_flag = threading.Event()
@@ -509,58 +340,61 @@ class Recorder:
         self._paused_since = None
         self._paused_accum = 0.0
         self._channels = 1
-        self._engines = []
+        self._source_channels = []
+        self._raw_paths = []
+        self._raw_files = []
+        self._raw_frame_counts = []
         self._workdir = None
 
     def start(self) -> None:
-        channels = max(1, min(max(d.channels for d, _ in self._device_specs), 2))
-        self._channels = channels
+        # The final mixed output uses the widest channel count among the
+        # sources, but each source is opened at its *own* native channel
+        # count - not this shared one. Forcing every source to the same
+        # count broke a real, deterministic case: a mono-only Bluetooth
+        # microphone paired with a stereo loopback source failed to open
+        # at all ("Invalid number of channels"), since the mic doesn't
+        # support the 2 channels the (unrelated) loopback source has.
+        # Mismatched channel counts are reconciled once, after resampling,
+        # in _load_and_resample.
+        self._source_channels = [max(1, min(d.channels, 2)) for d, _ in self._device_specs]
+        self._channels = max(self._source_channels)
         self._workdir = Path(tempfile.mkdtemp(prefix="meetingscribe_rec_"))
 
-        engines = []
+        self._sources = [
+            _SourceStream(device, loopback, self._exclusive, src_channels,
+                          int(device.default_samplerate) or _TARGET_RATE,
+                          on_error=lambda msg: self._events.put(("error", msg)))
+            for (device, loopback), src_channels in zip(self._device_specs, self._source_channels)
+        ]
+        started = []
         try:
-            for device, loopback in self._device_specs:
-                if not loopback and not self._exclusive:
-                    capture = _FfmpegMicCapture(device.name, channels, self._workdir)
-                    _start_with_retry(capture.start)
-                    meter = _MeterOnlyMicStream(device.sd_index, channels,
-                                                 int(device.default_samplerate) or _TARGET_RATE)
-                    meter.start()
-                    engines.append({"kind": "ffmpeg_mic", "capture": capture, "meter": meter})
-                else:
-                    requested_samplerate = int(device.default_samplerate) or _TARGET_RATE
-                    src = _SourceStream(device, loopback, self._exclusive, channels, requested_samplerate,
-                                        on_error=lambda msg: self._events.put(("error", msg)))
-                    _start_with_retry(src.start)
-                    raw_path = Path(tempfile.mkstemp(
-                        prefix="meetingscribe_rec_", suffix=".raw", dir=str(self._workdir))[1])
-                    engines.append({"kind": "legacy", "source": src, "raw_path": raw_path,
-                                     "raw_file": open(raw_path, "wb"), "frames": 0})
+            for src in self._sources:
+                _start_with_retry(src.start)
+                started.append(src)
         except RecordingError:
-            self._teardown_engines(engines)
+            for src in started:
+                src.stop()
+            self._sources = []
             raise
-        except OSError as e:
-            self._teardown_engines(engines)
-            raise RecordingError(f"Could not create a temporary recording file: {e}") from e
 
-        self._engines = engines
+        try:
+            self._raw_paths = [
+                Path(tempfile.mkstemp(prefix="meetingscribe_rec_", suffix=f".src{i}.raw",
+                                      dir=str(self._workdir))[1])
+                for i in range(len(self._sources))
+            ]
+            self._raw_files = [open(p, "wb") for p in self._raw_paths]
+        except OSError as e:
+            for src in self._sources:
+                src.stop()
+            self._sources = []
+            raise RecordingError(f"Could not create a temporary recording file: {e}") from e
+        self._raw_frame_counts = [0] * len(self._sources)
+
         self._start_time = time.monotonic()
         self._stop_flag.clear()
         self._mix_thread = threading.Thread(target=self._mix_loop, daemon=True)
         self._mix_thread.start()
-
-    @staticmethod
-    def _teardown_engines(engines: list) -> None:
-        for e in engines:
-            if e["kind"] == "ffmpeg_mic":
-                e["capture"].finish()
-                e["meter"].stop()
-            else:
-                e["source"].stop()
-                try:
-                    e["raw_file"].close()
-                except Exception:
-                    pass
 
     def _mix_loop(self):
         while not self._stop_flag.is_set():
@@ -569,44 +403,33 @@ class Recorder:
         self._drain_and_meter()  # final drain since the last tick
 
     def pause(self) -> None:
-        """ffmpeg-owned sources end their current segment (resume starts a
-        new one - see _FfmpegMicCapture); legacy sources just stop being
-        written to their raw file (see _drain_and_meter) - either way the
-        elapsed-time counter freezes too."""
+        """Keeps the underlying streams open (avoids re-opening an exclusive
+        device) - just stops writing audio to the file and freezes the
+        elapsed-time counter."""
         if self._paused_since is None:
             self._paused_since = time.monotonic()
-            for e in self._engines:
-                if e["kind"] == "ffmpeg_mic":
-                    e["capture"].pause()
 
     def resume(self) -> None:
         if self._paused_since is not None:
             self._paused_accum += time.monotonic() - self._paused_since
             self._paused_since = None
-            for e in self._engines:
-                if e["kind"] == "ffmpeg_mic":
-                    e["capture"].resume()
 
     @property
     def is_paused(self) -> bool:
         return self._paused_since is not None
 
     def _drain_and_meter(self):
-        paused = self._paused_since is not None
-        peaks = []
-        for e in self._engines:
-            if e["kind"] == "ffmpeg_mic":
-                peaks.append(e["meter"].take_peak())
-                continue
-            block = e["source"].drain()
-            peaks.append(float(np.abs(block).max()) if block.size else 0.0)
-            if not paused and block.size:
-                try:
-                    e["raw_file"].write(block.astype(np.float32, copy=False).tobytes())
-                    e["frames"] += block.shape[0]
-                except Exception:
-                    pass  # already closed by stop()
-        self._events.put(("levels", peaks))
+        blocks = [src.drain() for src in self._sources]
+        per_source_peaks = [float(np.abs(b).max()) if b.size else 0.0 for b in blocks]
+        if self._paused_since is None:
+            for i, block in enumerate(blocks):
+                if block.size:
+                    try:
+                        self._raw_files[i].write(block.astype(np.float32, copy=False).tobytes())
+                        self._raw_frame_counts[i] += block.shape[0]
+                    except Exception:
+                        pass  # already closed by stop()
+        self._events.put(("levels", per_source_peaks))
 
     def drain_events(self) -> list:
         """[("levels", [peak, ...]) | ("error", str), ...] accumulated since the last call."""
@@ -631,52 +454,61 @@ class Recorder:
             self._mix_thread.join(timeout=3.0)
             self._mix_thread = None
 
+        # Device-clock span, when available (microphone), bypasses
+        # Python-side wall-clock jitter for the rate measurement - see
+        # _SourceStream.device_duration and module docstring. Captured
+        # before src.stop() (harmless either way, but keeps the snapshot
+        # unambiguous).
         wall_clock_duration = self.elapsed_seconds()
+        device_durations = [src.device_duration() for src in self._sources]
 
-        arrays = []
-        for e in self._engines:
-            if e["kind"] == "ffmpeg_mic":
-                e["meter"].stop()
-                segments = e["capture"].finish()
-                mic_wav_path = self._workdir / "mic_final.wav"
-                _concat_wav_segments(segments, mic_wav_path, self._channels)
-                arrays.append(_load_wav_as_array(mic_wav_path, self._channels))
-            else:
-                # Device-clock span, when available (microphone), bypasses
-                # Python-side wall-clock jitter for the rate measurement -
-                # see _SourceStream.device_duration and module docstring.
-                device_duration = e["source"].device_duration()
-                e["source"].stop()
-                try:
-                    e["raw_file"].close()
-                except Exception:
-                    pass
-                active_duration = (max(0.0, device_duration - self._paused_accum)
-                                    if device_duration is not None else wall_clock_duration)
-                arrays.append(self._load_and_resample(e["raw_path"], e["frames"], active_duration))
+        for src in self._sources:
+            src.stop()
+        self._sources = []
 
-        self._engines = []
-        mixed = arrays[0] if len(arrays) == 1 else self._mix_final(arrays)
+        for f in self._raw_files:
+            try:
+                f.close()
+            except Exception:
+                pass
+        self._raw_files = []
+
+        resampled = []
+        for path, frames, device_duration, src_channels in zip(
+                self._raw_paths, self._raw_frame_counts, device_durations, self._source_channels):
+            active_duration = (max(0.0, device_duration - self._paused_accum)
+                                if device_duration is not None else wall_clock_duration)
+            resampled.append(self._load_and_resample(path, frames, active_duration, src_channels))
+        self._raw_paths = []
+
+        mixed = resampled[0] if len(resampled) == 1 else self._mix_final(resampled)
         self._write_wav(mixed)
         if self._workdir is not None:
+            import shutil
             shutil.rmtree(self._workdir, ignore_errors=True)
             self._workdir = None
         return self._out_path
 
-    def _load_and_resample(self, path: Path, frames_written: int, active_duration: float) -> np.ndarray:
+    def _load_and_resample(self, path: Path, frames_written: int, active_duration: float,
+                            src_channels: int) -> np.ndarray:
         if frames_written == 0 or active_duration <= 0:
             return np.zeros((0, self._channels), dtype=np.float32)
-        raw = np.fromfile(path, dtype=np.float32).reshape(-1, self._channels)
+        raw = np.fromfile(path, dtype=np.float32).reshape(-1, src_channels)
         true_rate = frames_written / active_duration
-        if not (8000 <= true_rate <= 192000):
-            return raw  # implausible measurement - use as captured rather than distort it further
-        # resample_poly (polyphase FIR, proper anti-aliasing), not the
-        # FFT-based resample(): the latter treats the signal as one
-        # periodic cycle, which is wrong for real, non-periodic speech and
-        # shows up as ringing/artifacts - resample_poly is the function
-        # actually meant for real-world audio like this.
-        ratio = Fraction(_TARGET_RATE / true_rate).limit_denominator(10_000)
-        return resample_poly(raw, ratio.numerator, ratio.denominator, axis=0).astype(np.float32)
+        if 8000 <= true_rate <= 192000:
+            # resample_poly (polyphase FIR, proper anti-aliasing), not the
+            # FFT-based resample(): the latter treats the signal as one
+            # periodic cycle, which is wrong for real, non-periodic speech
+            # and shows up as ringing/artifacts - resample_poly is the
+            # function actually meant for real-world audio like this.
+            ratio = Fraction(_TARGET_RATE / true_rate).limit_denominator(10_000)
+            raw = resample_poly(raw, ratio.numerator, ratio.denominator, axis=0).astype(np.float32)
+        # implausible rate measurement: use as captured rather than distort it further
+        if src_channels == self._channels:
+            return raw
+        if src_channels == 1:
+            return np.repeat(raw, self._channels, axis=1)  # mono mic alongside a stereo source - duplicate, don't drop
+        return raw.mean(axis=1, keepdims=True).repeat(self._channels, axis=1)
 
     def _mix_final(self, sources: list) -> np.ndarray:
         n = min(s.shape[0] for s in sources)
