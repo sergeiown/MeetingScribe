@@ -28,27 +28,30 @@ this app's pipeline (and its transcript UI) is built around one audio file
 per recording, and a meeting recording wants both sides of the
 conversation in the same transcript anyway. The two sources are captured
 by independently-clocked devices with no shared timeline, so they're
-aligned by wall-clock draining on a fixed tick (see _mix_and_write) rather
-than sample-accurately synchronized - adequate for speech transcription,
-not for professional multi-track work.
+mixed by simply truncating each tick's blocks to the shortest one - plain,
+standard practice for live-mixing asynchronous sources, adequate for
+speech transcription, not for professional multi-track work.
 
-WASAPI's actual capture throughput does not reliably match the rate it
-reports/was asked for, confirmed by direct testing - and, more importantly,
-it *drifts during a single session* rather than being off by one fixed
-factor (measured directly: one real microphone's shared-mode throughput
-moved from ~42.5 kHz to ~48 kHz to ~44.7 kHz across three-second windows
-within the same continuous recording). A single after-the-fact "average
-rate" correction can fix the whole file's overall duration, but not this -
-it leaves the true internal timing uneven, which is what actually produces
-an audible wobble/grinding artifact, distinct from (and unfixed by) a
-whole-file pitch shift. The fix is to never trust device-reported timing at
-all: every ~50ms mix tick, each source's block is resampled (np.interp) to
-however many frames the *real, wall-clock-measured* elapsed time for that
-tick implies at the declared output rate. This also naturally keeps
-multi-source mixing aligned, since every source lands on the same
-target-frame count each tick regardless of how many raw frames it actually
-delivered - no more truncating one source's leftover frames to match a
-shorter one."""
+On some real hardware, a WASAPI *exclusive-mode* stream's actual delivered
+throughput does not match the rate it was opened with/reports (confirmed
+by direct testing: one real microphone's exclusive-mode stream, opened at
+a requested/reported 48000 Hz, actually delivered audio at a fairly
+constant ~70000 Hz - a genuine driver quirk, not a measurement error,
+reproduced with a minimal capture-and-write script with no custom
+processing at all). Shared mode did not show this on the same hardware
+(its small ~2% timing error matched plain measurement/loop overhead), so
+it is trusted as-is; only exclusive mode is measured (see start()). The
+fix used here is deliberately the simplest, standard one: measure the real
+throughput once, briefly, right after opening the stream, and declare
+*that* measured rate in the WAV header - then write every subsequently
+captured PCM frame completely unmodified for the rest of the session. No
+resampling, no interpolation, no per-tick correction: those were tried
+first and, despite being individually correct in isolation, kept
+introducing their own new artifacts (a phase break at every tick boundary,
+then a chunking/timing mismatch in the loopback pull) - each fix for the
+last bug became the next bug. Trusting a single calibration and leaving
+the audio data itself completely untouched removes that whole class of
+problem."""
 
 import logging
 import queue
@@ -64,7 +67,7 @@ import numpy as np
 _log = logging.getLogger(__name__)
 
 _CHUNK_SECONDS = 0.05  # mix-tick interval and meter update grain
-_LOOPBACK_PULL_SECONDS = 0.005  # see _start_loopback docstring note below
+_CALIBRATION_SECONDS = 1.0  # see module docstring
 _MIX_GAIN = 0.7  # per source when mixing two, so simultaneous loud sources don't clip
 
 
@@ -124,34 +127,6 @@ def list_loopback_outputs() -> list:
             name=spk.name, is_default=(spk.name == default_name),
             channels=spk.channels or 2, default_samplerate=48000.0, sd_index=None))
     return devices
-
-
-def _resample_window(block: np.ndarray, raw_start: float, raw_end: float,
-                      out_times: np.ndarray) -> np.ndarray:
-    """Resamples one tick's block (assumed to span the real, wall-clock
-    window [raw_start, raw_end) uniformly) onto `out_times` - absolute
-    output-sample instants on a continuous timeline that spans the *whole*
-    recording, not just this tick. This is what makes consecutive ticks
-    phase-continuous: resampling each tick to its own fresh [0, 1) axis
-    (an earlier version of this fix) independently maps every chunk's
-    endpoints, which are not guaranteed to line up with the previous
-    chunk's - confirmed by direct testing (a synthetic, perfectly smooth
-    tone split into ticks that way showed a real, elevated discontinuity at
-    every single tick boundary, audible as the reported creaking/grinding).
-    Interpolating against one continuous absolute clock instead removes
-    that seam entirely."""
-    channels = block.shape[1] if block.ndim == 2 else 1
-    n = block.shape[0]
-    count = len(out_times)
-    if count == 0:
-        return np.zeros((0, channels), dtype=np.float32)
-    if n == 0 or raw_end <= raw_start:
-        return np.zeros((count, channels), dtype=np.float32)
-    raw_times = raw_start + np.linspace(0.0, raw_end - raw_start, n, endpoint=False)
-    out = np.empty((count, channels), dtype=np.float32)
-    for ch in range(channels):
-        out[:, ch] = np.interp(out_times, raw_times, block[:, ch])
-    return out
 
 
 def resolve_device(devices: list, preferred_name):
@@ -231,23 +206,7 @@ class _SourceStream:
                     mic = sc.get_microphone(self.device.name, include_loopback=True)
                     with mic.recorder(samplerate=self.samplerate, channels=self.channels) as rec:
                         ready.set()
-                        # Deliberately much smaller than the mix tick
-                        # (_CHUNK_SECONDS): rec.record(numframes=N) blocks
-                        # until N frames exist, on its own clock, entirely
-                        # independent of the mix thread's wall-clock tick.
-                        # Sized to one full tick, a block that's slow to
-                        # fill (real capture running behind the requested
-                        # rate) can straddle a tick boundary and land almost
-                        # entirely in one drain() call instead of being
-                        # spread across the ticks it actually spans -
-                        # confirmed by direct testing to compress that
-                        # audio into too short a declared time window and
-                        # produce an audible artifact. Pulling in much
-                        # smaller pieces bounds how much real time a single
-                        # queued block can represent, keeping each mix
-                        # tick's drain() close to that tick's real span
-                        # regardless of the loopback device's actual rate.
-                        chunk = max(1, int(self.samplerate * _LOOPBACK_PULL_SECONDS))
+                        chunk = max(1, int(self.samplerate * _CHUNK_SECONDS))
                         while not self._stop_flag.is_set():
                             data = rec.record(numframes=chunk)
                             self.blocks.put(data)
@@ -318,18 +277,10 @@ class Recorder:
         self._start_time = None
         self._paused_since = None
         self._paused_accum = 0.0
-        self._target_rate = 48000
-        # Continuous output-timeline state for _resample_window - see its
-        # docstring. _cum_real_time never advances while paused (see
-        # _mix_and_write), so paused stretches are excluded from the output
-        # exactly like they're excluded from elapsed_seconds().
-        self._cum_real_time = 0.0
-        self._next_out_time = 0.0
 
     def start(self) -> None:
         channels = max(1, min(max(d.channels for d, _ in self._device_specs), 2))
         requested_samplerate = int(self._device_specs[0][0].default_samplerate) or 48000
-        self._target_rate = requested_samplerate
 
         self._sources = [
             _SourceStream(device, loopback, self._exclusive, channels, requested_samplerate,
@@ -347,33 +298,59 @@ class Recorder:
             self._sources = []
             raise
 
+        # elapsed_seconds() measures from this same moment, since the
+        # calibration window's audio (if any, see below) is captured and
+        # written too - the displayed elapsed time should match the file.
+        self._start_time = time.monotonic()
+
+        # Shared mode's declared/reported rate matched real throughput in
+        # direct testing (~2% error, consistent with plain measurement
+        # noise) - only exclusive mode showed a genuine, large mismatch
+        # (confirmed on real hardware: a "48000 Hz" exclusive stream
+        # actually delivering ~70000 Hz), so only it needs measuring.
+        # Calibrating shared mode too was tried and made things worse: its
+        # first ~1s under-measures (a real ramp-up transient - confirmed by
+        # direct testing showing an artificially low rate specifically in
+        # that opening window), so a calibration that helps exclusive mode
+        # would have mislabeled shared mode's file instead.
+        calib_blocks = None
+        if self._exclusive:
+            calib_t0 = time.monotonic()
+            time.sleep(_CALIBRATION_SECONDS)
+            calib_elapsed = time.monotonic() - calib_t0
+            calib_blocks = [src.drain() for src in self._sources]
+            primary_frames = calib_blocks[0].shape[0]
+            measured_rate = int(round(primary_frames / calib_elapsed)) if primary_frames else requested_samplerate
+            if not (8000 <= measured_rate <= 192000):
+                # Implausible (e.g. near-total silence during calibration) -
+                # fall back rather than write a nonsense framerate.
+                measured_rate = requested_samplerate
+        else:
+            measured_rate = requested_samplerate
+
         try:
             self._wav = wave.open(str(self._out_path), "wb")
             self._wav.setnchannels(channels)
             self._wav.setsampwidth(2)
-            self._wav.setframerate(self._target_rate)
+            self._wav.setframerate(measured_rate)
         except OSError as e:
             for src in self._sources:
                 src.stop()
             self._sources = []
             raise RecordingError(f"Could not create the recording file: {e}") from e
 
-        # elapsed_seconds() and the per-tick resampling in _mix_loop both
-        # measure from this same moment the sources went live.
-        self._start_time = time.monotonic()
+        if calib_blocks is not None:
+            self._mix_and_write(calib_blocks)  # don't lose the calibration-window audio
+
         self._stop_flag.clear()
         self._mix_thread = threading.Thread(target=self._mix_loop, daemon=True)
         self._mix_thread.start()
 
     def _mix_loop(self):
-        last_tick = time.monotonic()
         while not self._stop_flag.is_set():
             time.sleep(_CHUNK_SECONDS)
-            now = time.monotonic()
-            self._mix_and_write([src.drain() for src in self._sources], now - last_tick)
-            last_tick = now
-        now = time.monotonic()
-        self._mix_and_write([src.drain() for src in self._sources], now - last_tick)  # final drain since the last tick
+            self._mix_and_write([src.drain() for src in self._sources])
+        self._mix_and_write([src.drain() for src in self._sources])  # final drain since the last tick
 
     def pause(self) -> None:
         """Keeps the underlying streams open (avoids re-opening an exclusive
@@ -391,7 +368,7 @@ class Recorder:
     def is_paused(self) -> bool:
         return self._paused_since is not None
 
-    def _mix_and_write(self, blocks, real_elapsed):
+    def _mix_and_write(self, blocks):
         if self._paused_since is not None:
             # Still drained (by the caller) so the source queues don't grow
             # unbounded while paused - just not written or metered as audio.
@@ -401,33 +378,14 @@ class Recorder:
         # Per-source peaks, computed before mixing, so the GUI can show one
         # meter per active source (mic + system) instead of one blended number.
         per_source_peaks = [float(np.abs(b).max()) if b.size else 0.0 for b in blocks]
-
-        # Conform every source to the output samples this tick's real
-        # wall-clock window implies at the declared rate - not however many
-        # raw frames the device happened to deliver (see module docstring) -
-        # continuing the same absolute output clock across ticks (see
-        # _resample_window) rather than resetting it each tick. This also
-        # keeps multi-source mixing aligned without truncating whichever
-        # source delivered more raw frames this tick.
-        raw_start = self._cum_real_time
-        raw_end = raw_start + max(0.0, real_elapsed)
-        self._cum_real_time = raw_end
-        # Clamped to raw_start: floating-point accumulation in _cum_real_time
-        # can otherwise leave _next_out_time a hair behind this tick's own
-        # window (confirmed by direct testing) - out_times would then start
-        # slightly *before* raw_start, get resampled against THIS tick's
-        # block anyway, clamp to its first raw sample (np.interp doesn't
-        # extrapolate), and produce a wrong value right at the seam. Losing
-        # that sub-sample sliver of time (a few dozen microseconds) is
-        # inaudible; resampling it against the wrong tick's data was not.
-        start_time = max(self._next_out_time, raw_start)
-        count = max(0, int(np.floor((raw_end - start_time) * self._target_rate)))
-        out_times = start_time + np.arange(count) / self._target_rate
-        self._next_out_time = start_time + count / self._target_rate
-
-        resampled = [_resample_window(b, raw_start, raw_end, out_times) for b in blocks]
-        mixed = resampled[0] if len(resampled) == 1 else sum(b * _MIX_GAIN for b in resampled)
-
+        if len(blocks) == 1:
+            mixed = blocks[0]
+        else:
+            n = min(b.shape[0] for b in blocks)
+            if n == 0:
+                mixed = np.zeros((0, blocks[0].shape[1]), dtype=np.float32)
+            else:
+                mixed = sum(b[:n] * _MIX_GAIN for b in blocks)
         if mixed.size:
             pcm16 = np.clip(mixed * 32767.0, -32768, 32767).astype(np.int16)
             if self._wav is not None:
