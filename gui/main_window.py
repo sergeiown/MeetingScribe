@@ -30,7 +30,7 @@ from .settings_dialog import SettingsDialog
 from .style import get_prevent_sleep_preference
 from .dialogs import SpeakerNameDialog
 from .update_dialog import UpdateDownloadDialog
-from .widgets import LevelMeterWidget
+from .widgets import LevelMeterWidget, _ElidedLabel
 from .workers import TranscriptionWorker, DiarizationWorker, UpdateCheckWorker
 
 _PREFERRED_WIDTH = 1340
@@ -96,6 +96,15 @@ class MainWindow(QMainWindow):
         self._recording_devices = []
         self._elapsed_timer = QTimer(self)
         self._elapsed_timer.timeout.connect(self._update_elapsed_label)
+        # Reflects which device would actually be used right now - reruns
+        # periodically (not just on Settings-close) so plugging in a
+        # different microphone updates the label without needing to open
+        # Settings at all. Skipped while a recording is in progress: that
+        # session is already locked to whichever device it started with,
+        # so the label shouldn't imply a live device it isn't using.
+        self._device_label_timer = QTimer(self)
+        self._device_label_timer.timeout.connect(self._update_active_device_labels)
+        self._device_label_timer.start(2000)
 
         # Created once, reused across files - independent of the recording
         # subsystem above (sounddevice/soundcard); playback is 100% QtMultimedia.
@@ -216,6 +225,11 @@ class MainWindow(QMainWindow):
         self._mic_meter_label.setProperty("hint", True)
         self._mic_meter_label.setAlignment(Qt.AlignCenter)
         mic_col.addWidget(self._mic_meter_label)
+        self._mic_device_label = _ElidedLabel("")
+        self._mic_device_label.setProperty("hint", True)
+        self._mic_device_label.setAlignment(Qt.AlignCenter)
+        self._mic_device_label.setStyleSheet("font-size: 9px;")
+        mic_col.addWidget(self._mic_device_label)
         self._mic_meter = LevelMeterWidget()
         mic_col.addWidget(self._mic_meter, stretch=1)
         meters_row.addLayout(mic_col)
@@ -225,6 +239,11 @@ class MainWindow(QMainWindow):
         self._system_meter_label.setProperty("hint", True)
         self._system_meter_label.setAlignment(Qt.AlignCenter)
         system_col.addWidget(self._system_meter_label)
+        self._system_device_label = _ElidedLabel("")
+        self._system_device_label.setProperty("hint", True)
+        self._system_device_label.setAlignment(Qt.AlignCenter)
+        self._system_device_label.setStyleSheet("font-size: 9px;")
+        system_col.addWidget(self._system_device_label)
         self._system_meter = LevelMeterWidget()
         system_col.addWidget(self._system_meter, stretch=1)
         meters_row.addLayout(system_col)
@@ -278,11 +297,28 @@ class MainWindow(QMainWindow):
 
     def _update_source_meter_visibility(self):
         self._mic_meter_label.setVisible(self._mic_checkbox.isChecked())
+        self._mic_device_label.setVisible(self._mic_checkbox.isChecked())
         self._mic_meter.setVisible(self._mic_checkbox.isChecked())
         self._system_meter_label.setVisible(self._system_checkbox.isChecked())
+        self._system_device_label.setVisible(self._system_checkbox.isChecked())
         self._system_meter.setVisible(self._system_checkbox.isChecked())
         self._mic_meter_label.setText(tr("Microphone level"))
         self._system_meter_label.setText(tr("System audio level"))
+        self._update_active_device_labels()
+
+    def _update_active_device_labels(self):
+        """Small print under each meter naming the device that will
+        actually be used - resolved the same way _start_recording()
+        resolves it, so it never has to guess or duplicate that logic, and
+        is only worth looking up at all when the matching source is on."""
+        if self._recording_controller is not None:
+            return  # that session is locked to whichever device it started with
+        if self._mic_checkbox.isChecked():
+            mic = core.resolve_device(core.list_microphones(), get_mic_device_name())
+            self._mic_device_label.set_text(mic.name if mic else tr("No microphone found"))
+        if self._system_checkbox.isChecked():
+            speaker = core.resolve_device(core.list_loopback_outputs(), get_loopback_device_name())
+            self._system_device_label.set_text(speaker.name if speaker else tr("No output device found"))
 
     def _on_record_clicked(self):
         self._start_recording()
@@ -610,6 +646,7 @@ class MainWindow(QMainWindow):
         self._system_checkbox.setText(tr("System audio"))
         self._mic_meter_label.setText(tr("Microphone level"))
         self._system_meter_label.setText(tr("System audio level"))
+        self._update_active_device_labels()
         self._stop_btn.setText(tr("Stop"))
         if self._recording_controller is None:
             self._record_btn.setText(tr("Record"))
@@ -795,6 +832,7 @@ class MainWindow(QMainWindow):
         else:
             self._refresh_model_choices()
             self._refresh_diarize_availability()
+        self._update_active_device_labels()
 
     def _show_about(self):
         QMessageBox.about(self, tr("About MeetingScribe"), tr(_ABOUT_TEXT, version=core.VERSION))
