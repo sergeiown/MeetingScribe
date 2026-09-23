@@ -339,8 +339,6 @@ _UK = {
     "Record audio": "Запис аудіо",
     "Microphone": "Мікрофон",
     "System audio": "Системний звук",
-    "Microphone level": "Рівень мікрофона",
-    "System audio level": "Рівень системного звуку",
     "No microphone found": "Мікрофон не знайдено",
     "No output device found": "Пристрій виводу не знайдено",
     "Peak: {db} dB": "Пік: {db} дБ",

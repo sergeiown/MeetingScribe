@@ -107,6 +107,14 @@ def _classify_ffmpeg_error(stderr_text: str) -> str:
 def list_microphones() -> list:
     """WASAPI-capable input devices - the only ones exclusive mode applies to."""
     import sounddevice as sd
+    # PortAudio builds its device table once, at initialization, and does
+    # not notice devices plugged/unplugged afterward (confirmed: a
+    # Bluetooth headset connected after the process started was invisible
+    # here until this) - forcing a re-init makes it re-enumerate, which is
+    # the only way a long-running app process picks up e.g. a Bluetooth
+    # headset connected (or made the Windows default) after it started.
+    sd._terminate()
+    sd._initialize()
     hostapis = sd.query_hostapis()
     wasapi_idx = next((i for i, a in enumerate(hostapis) if "WASAPI" in a["name"]), None)
     if wasapi_idx is None:

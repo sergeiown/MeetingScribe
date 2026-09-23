@@ -44,14 +44,6 @@ class _ElidedLabel(QLabel):
         super().setText(elided)
         self.setToolTip(self._full_text if elided != self._full_text else "")
 
-    def set_text(self, text: str) -> None:
-        """The only safe way to change this label's text after construction
-        - plain setText() would get silently overwritten back to the old
-        _full_text on the next resizeEvent (confirmed: this is exactly what
-        happened the first time this label was reused elsewhere)."""
-        self._full_text = text
-        self._update_elided()
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_elided()

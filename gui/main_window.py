@@ -30,7 +30,7 @@ from .settings_dialog import SettingsDialog
 from .style import get_prevent_sleep_preference
 from .dialogs import SpeakerNameDialog
 from .update_dialog import UpdateDownloadDialog
-from .widgets import LevelMeterWidget, _ElidedLabel
+from .widgets import LevelMeterWidget
 from .workers import TranscriptionWorker, DiarizationWorker, UpdateCheckWorker
 
 _PREFERRED_WIDTH = 1340
@@ -221,13 +221,10 @@ class MainWindow(QMainWindow):
         meters_row.setSpacing(12)
 
         mic_col = QVBoxLayout()
-        self._mic_meter_label = QLabel()
-        self._mic_meter_label.setProperty("hint", True)
-        self._mic_meter_label.setAlignment(Qt.AlignCenter)
-        mic_col.addWidget(self._mic_meter_label)
-        self._mic_device_label = _ElidedLabel("")
+        self._mic_device_label = QLabel()
         self._mic_device_label.setProperty("hint", True)
         self._mic_device_label.setAlignment(Qt.AlignCenter)
+        self._mic_device_label.setWordWrap(True)
         self._mic_device_label.setStyleSheet("font-size: 9px;")
         mic_col.addWidget(self._mic_device_label)
         self._mic_meter = LevelMeterWidget()
@@ -235,13 +232,10 @@ class MainWindow(QMainWindow):
         meters_row.addLayout(mic_col)
 
         system_col = QVBoxLayout()
-        self._system_meter_label = QLabel()
-        self._system_meter_label.setProperty("hint", True)
-        self._system_meter_label.setAlignment(Qt.AlignCenter)
-        system_col.addWidget(self._system_meter_label)
-        self._system_device_label = _ElidedLabel("")
+        self._system_device_label = QLabel()
         self._system_device_label.setProperty("hint", True)
         self._system_device_label.setAlignment(Qt.AlignCenter)
+        self._system_device_label.setWordWrap(True)
         self._system_device_label.setStyleSheet("font-size: 9px;")
         system_col.addWidget(self._system_device_label)
         self._system_meter = LevelMeterWidget()
@@ -296,14 +290,10 @@ class MainWindow(QMainWindow):
         self._update_source_meter_visibility()
 
     def _update_source_meter_visibility(self):
-        self._mic_meter_label.setVisible(self._mic_checkbox.isChecked())
         self._mic_device_label.setVisible(self._mic_checkbox.isChecked())
         self._mic_meter.setVisible(self._mic_checkbox.isChecked())
-        self._system_meter_label.setVisible(self._system_checkbox.isChecked())
         self._system_device_label.setVisible(self._system_checkbox.isChecked())
         self._system_meter.setVisible(self._system_checkbox.isChecked())
-        self._mic_meter_label.setText(tr("Microphone level"))
-        self._system_meter_label.setText(tr("System audio level"))
         self._update_active_device_labels()
 
     def _update_active_device_labels(self):
@@ -315,10 +305,10 @@ class MainWindow(QMainWindow):
             return  # that session is locked to whichever device it started with
         if self._mic_checkbox.isChecked():
             mic = core.resolve_device(core.list_microphones(), get_mic_device_name())
-            self._mic_device_label.set_text(mic.name if mic else tr("No microphone found"))
+            self._mic_device_label.setText(mic.name if mic else tr("No microphone found"))
         if self._system_checkbox.isChecked():
             speaker = core.resolve_device(core.list_loopback_outputs(), get_loopback_device_name())
-            self._system_device_label.set_text(speaker.name if speaker else tr("No output device found"))
+            self._system_device_label.setText(speaker.name if speaker else tr("No output device found"))
 
     def _on_record_clicked(self):
         self._start_recording()
@@ -644,8 +634,6 @@ class MainWindow(QMainWindow):
         self._record_box.setTitle(tr("Record audio"))
         self._mic_checkbox.setText(tr("Microphone"))
         self._system_checkbox.setText(tr("System audio"))
-        self._mic_meter_label.setText(tr("Microphone level"))
-        self._system_meter_label.setText(tr("System audio level"))
         self._update_active_device_labels()
         self._stop_btn.setText(tr("Stop"))
         if self._recording_controller is None:
