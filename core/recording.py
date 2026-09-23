@@ -69,6 +69,31 @@ _TARGET_RATE = 48000  # every recording ends up at this rate, regardless of what
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _FFMPEG_STOP_TIMEOUT = 5.0  # graceful "q" stop before escalating to terminate()
 _FFMPEG_STARTUP_GRACE = 0.5  # after spawning, before trusting ffmpeg opened the device cleanly
+_DEVICE_OPEN_RETRIES = 3  # see _start_with_retry - rides out transient device-busy failures
+_DEVICE_OPEN_RETRY_DELAY = 0.4
+
+
+def _start_with_retry(start_fn) -> None:
+    """Retries a device-open callable a few times before giving up - a
+    real recording started with both the microphone and system audio
+    pointed at the same Bluetooth headset failed intermittently with
+    "already in use", confirmed to be a transient race: Windows switches
+    that headset from output-only to a bidirectional Bluetooth profile the
+    moment the microphone side opens, and briefly reports the device busy
+    to whichever side tries to open during that switch. A plain, bounded
+    retry is the standard way to ride out a transient device-open failure
+    like this, rather than trying to detect or wait for the profile switch
+    directly."""
+    last_error = None
+    for attempt in range(_DEVICE_OPEN_RETRIES):
+        try:
+            start_fn()
+            return
+        except RecordingError as e:
+            last_error = e
+            if attempt < _DEVICE_OPEN_RETRIES - 1:
+                time.sleep(_DEVICE_OPEN_RETRY_DELAY)
+    raise last_error
 
 
 class RecordingError(Exception):
@@ -497,7 +522,7 @@ class Recorder:
             for device, loopback in self._device_specs:
                 if not loopback and not self._exclusive:
                     capture = _FfmpegMicCapture(device.name, channels, self._workdir)
-                    capture.start()
+                    _start_with_retry(capture.start)
                     meter = _MeterOnlyMicStream(device.sd_index, channels,
                                                  int(device.default_samplerate) or _TARGET_RATE)
                     meter.start()
@@ -506,7 +531,7 @@ class Recorder:
                     requested_samplerate = int(device.default_samplerate) or _TARGET_RATE
                     src = _SourceStream(device, loopback, self._exclusive, channels, requested_samplerate,
                                         on_error=lambda msg: self._events.put(("error", msg)))
-                    src.start()
+                    _start_with_retry(src.start)
                     raw_path = Path(tempfile.mkstemp(
                         prefix="meetingscribe_rec_", suffix=".raw", dir=str(self._workdir))[1])
                     engines.append({"kind": "legacy", "source": src, "raw_path": raw_path,
