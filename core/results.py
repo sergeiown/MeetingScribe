@@ -16,6 +16,27 @@ def save_result(file_path: Path, text: str) -> Path:
     return out
 
 
+def rename_input_file(old_path: Path, new_stem: str) -> Path:
+    """Renames an input file in place, keeping its extension, and renames
+    its matching output transcript / segments sidecar (if any) to match -
+    both are paired to the input file by stem, so leaving them behind would
+    silently break that pairing."""
+    new_stem = new_stem.strip()
+    if not new_stem:
+        raise ValueError("Name cannot be empty.")
+    new_path = old_path.with_name(new_stem + old_path.suffix)
+    if new_path != old_path and new_path.exists():
+        raise FileExistsError(f'A file named "{new_path.name}" already exists.')
+    old_txt = OUTPUT_DIR / (old_path.stem + ".txt")
+    old_segments = _segments_sidecar_path(old_path)
+    old_path.rename(new_path)
+    if old_txt.exists():
+        old_txt.rename(OUTPUT_DIR / (new_stem + ".txt"))
+    if old_segments.exists():
+        old_segments.rename(_segments_sidecar_path(new_path))
+    return new_path
+
+
 def _segments_sidecar_path(file_path: Path) -> Path:
     return SEGMENTS_DIR / (file_path.stem + ".segments.json")
 

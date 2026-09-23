@@ -7,14 +7,14 @@ from pathlib import Path
 
 import core
 
-from PySide6.QtCore import Qt, QSettings, QThread, QTimer, QUrl
+from PySide6.QtCore import Qt, QSettings, QThread, QTimer, QUrl, QFileSystemWatcher
 from PySide6.QtGui import QDesktopServices, QTextCursor, QColor, QFont, QFontMetrics
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem,
     QPushButton, QComboBox, QCheckBox, QLabel, QProgressBar, QTextEdit,
-    QFileDialog, QMessageBox, QSpinBox, QToolTip, QToolButton, QMenu,
+    QFileDialog, QMessageBox, QSpinBox, QToolTip, QToolButton, QMenu, QInputDialog,
 )
 
 from .device_prefs import get_device_preference
@@ -137,6 +137,20 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._apply_initial_geometry()
         self._refresh_file_list(select_all=False)
+
+        # Auto-refreshes the file list for changes made outside the app too
+        # (e.g. dropping a file into input\ via Explorer while it's running),
+        # not just the app's own add/delete/rename/recording/transcription
+        # actions - those already call _refresh_file_list() directly.
+        # Debounced since a multi-file drop/copy fires several events in
+        # quick succession.
+        self._input_refresh_debounce = QTimer(self)
+        self._input_refresh_debounce.setSingleShot(True)
+        self._input_refresh_debounce.timeout.connect(lambda: self._refresh_file_list(select_all=False))
+        self._input_watcher = QFileSystemWatcher(self)
+        self._input_watcher.addPath(str(core.INPUT_DIR))
+        self._input_watcher.directoryChanged.connect(lambda _path: self._input_refresh_debounce.start(300))
+
         self._refresh_model_choices()
         self._refresh_diarize_availability()
         # Delayed so it never competes with startup itself for network/CPU,
@@ -517,6 +531,7 @@ class MainWindow(QMainWindow):
             header.setSectionResizeMode(col_idx, QHeaderView.ResizeToContents)
         self._file_table.itemSelectionChanged.connect(self._refresh_diarize_button)
         self._file_table.itemSelectionChanged.connect(self._refresh_play_button)
+        self._file_table.itemSelectionChanged.connect(self._refresh_rename_button)
         self._file_table.itemDoubleClicked.connect(self._on_file_double_clicked)
         files_layout.addWidget(self._file_table, stretch=1)
 
@@ -528,15 +543,16 @@ class MainWindow(QMainWindow):
         file_btn_row = QHBoxLayout()
         self._add_btn = QPushButton(tr("Add files..."))
         self._add_btn.clicked.connect(self._on_add_files)
-        self._refresh_btn = QPushButton(tr("Refresh"))
-        self._refresh_btn.clicked.connect(self._refresh_file_list)
+        self._rename_btn = QPushButton(tr("Rename"))
+        self._rename_btn.clicked.connect(self._on_rename_file)
+        self._rename_btn.setEnabled(False)
         self._delete_btn = QPushButton(tr("Delete selected"))
         self._delete_btn.clicked.connect(self._on_delete_files)
         self._play_btn = QPushButton(tr("Play"))
         self._play_btn.clicked.connect(self._on_play_clicked)
         self._play_btn.setEnabled(False)
         file_btn_row.addWidget(self._add_btn)
-        file_btn_row.addWidget(self._refresh_btn)
+        file_btn_row.addWidget(self._rename_btn)
         file_btn_row.addWidget(self._delete_btn)
         file_btn_row.addWidget(self._play_btn)
         file_btn_row.addStretch()
@@ -688,7 +704,7 @@ class MainWindow(QMainWindow):
             [tr("File"), tr("Size"), tr("Duration"), tr("Status")])
         self._empty_hint.setText(tr("No files yet - click \"Add files...\" or drop some into input\\"))
         self._add_btn.setText(tr("Add files..."))
-        self._refresh_btn.setText(tr("Refresh"))
+        self._rename_btn.setText(tr("Rename"))
         self._delete_btn.setText(tr("Delete selected"))
         self._play_btn.setText(
             tr("Pause") if self._media_player.playbackState() == QMediaPlayer.PlayingState else tr("Play"))
@@ -1081,6 +1097,30 @@ class MainWindow(QMainWindow):
                                  tr("Some files could not be deleted:\n\n{errors}", errors="\n".join(failed)))
         self._refresh_file_list()
 
+    def _refresh_rename_button(self):
+        self._rename_btn.setEnabled(len(self._selected_files()) == 1 and self._worker is None)
+
+    def _on_rename_file(self):
+        files = self._selected_files()
+        if len(files) != 1:
+            return
+        old_path = files[0]
+        new_stem, ok = QInputDialog.getText(
+            self, tr("Rename file"), tr("New name:"), text=old_path.stem)
+        if not ok:
+            return
+        new_stem = new_stem.strip()
+        if not new_stem or new_stem == old_path.stem:
+            return
+        self._release_playback_lock_on(old_path)
+        try:
+            new_path = core.rename_input_file(old_path, new_stem)
+        except (OSError, ValueError) as e:
+            QMessageBox.warning(self, tr("Rename file"), str(e))
+            return
+        self._refresh_file_list(select_all=False)
+        self._select_file_by_path(new_path)
+
     # --- playback ------------------------------------------------------
 
     def _refresh_play_button(self):
@@ -1221,6 +1261,7 @@ class MainWindow(QMainWindow):
         self._worker = TranscriptionWorker(files, model_key, language, auto_diarize, hf_token, num_speakers,
                                            get_device_preference())
         self._connect_worker_signals()
+        self._refresh_rename_button()
         self._worker.run()
 
     def _on_diarize(self):
@@ -1236,6 +1277,7 @@ class MainWindow(QMainWindow):
         self._begin_run(len(files))
         self._worker = DiarizationWorker(files, hf_token, num_speakers, get_device_preference())
         self._connect_worker_signals()
+        self._refresh_rename_button()
         self._worker.run()
 
     def _on_cancel(self):
@@ -1339,6 +1381,7 @@ class MainWindow(QMainWindow):
         self._progress_bar.setValue(0)
         self._progress_bar.setFormat("")
         self._refresh_diarize_button()
+        self._refresh_rename_button()
 
     def closeEvent(self, event):
         if self._recording_controller is not None:

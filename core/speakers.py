@@ -200,16 +200,47 @@ def extract_speaker_embeddings(audio_np, sr, turns, hf_token: str, db: dict, *,
     return result
 
 
+def _distance_to_turns(seg_start, seg_end, label_turns) -> float:
+    best = None
+    for t_start, t_end in label_turns:
+        if seg_end < t_start:
+            d = t_start - seg_end
+        elif seg_start > t_end:
+            d = seg_start - t_end
+        else:
+            d = 0.0
+        if best is None or d < best:
+            best = d
+    return best
+
+
 def collect_speaker_samples(segments, turns, unknown_labels, max_samples: int = 3) -> dict:
-    """{label: [(start_time, text), ...]} - up to max_samples per label."""
+    """{label: [(start_time, text), ...]} - up to max_samples per label.
+
+    A label can end up with no overlapping segment at all (e.g. a brief
+    interjection whisper folded into a neighboring speaker's segment instead
+    of splitting it out) - the naming dialog must never show up with nothing
+    to go on, so any label left empty here falls back to whichever texted
+    segment is closest in time to one of its turns."""
     samples = {lbl: [] for lbl in unknown_labels}
-    for seg in segments:
-        txt = seg.text.strip()
-        if not txt:
-            continue
-        spk = assign_speaker(seg.start, seg.end, turns)
+    texted = [(seg.start, seg.end, seg.text.strip()) for seg in segments if seg.text.strip()]
+
+    for start, end, txt in texted:
+        spk = assign_speaker(start, end, turns)
         if spk in samples and len(samples[spk]) < max_samples:
-            samples[spk].append((seg.start, txt))
+            samples[spk].append((start, txt))
+
+    if not texted:
+        return samples
+
+    for label in unknown_labels:
+        if samples[label]:
+            continue
+        label_turns = [(s, e) for s, e, lbl in turns if lbl == label]
+        if not label_turns:
+            continue
+        nearest = min(texted, key=lambda seg: _distance_to_turns(seg[0], seg[1], label_turns))
+        samples[label].append((nearest[0], nearest[2]))
     return samples
 
 

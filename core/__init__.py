@@ -54,7 +54,7 @@ from .config_env import (
     read_config_env, write_config_env, read_hf_token,
     has_diarization_support, is_diar_pipeline_cached,
 )
-from .results import save_result, save_segments, load_segments, file_status
+from .results import save_result, save_segments, load_segments, file_status, rename_input_file
 from .recording import (
     RecordingError, AudioDevice, Recorder, list_microphones, list_loopback_outputs, resolve_device,
 )
@@ -88,6 +88,6 @@ __all__ = [
     "delete_whisper_model", "delete_diarization_models",
     "read_config_env", "write_config_env", "read_hf_token",
     "has_diarization_support", "is_diar_pipeline_cached",
-    "save_result", "save_segments", "load_segments", "file_status",
+    "save_result", "save_segments", "load_segments", "file_status", "rename_input_file",
     "RecordingError", "AudioDevice", "Recorder", "list_microphones", "list_loopback_outputs", "resolve_device",
 ]

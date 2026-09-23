@@ -25,7 +25,9 @@ _UK = {
     "The transcript will appear here once processing starts...":
         "Розшифровка з'явиться тут після початку обробки...",
     "Add files...": "Додати файли...",
-    "Refresh": "Оновити",
+    "Rename": "Перейменувати",
+    "Rename file": "Перейменування файлу",
+    "New name:": "Нова назва:",
     "Delete selected": "Видалити вибрані",
     "Options": "Опції",
     "Model:": "Модель:",
