@@ -272,7 +272,12 @@ class MainWindow(QMainWindow):
         mic_col.addWidget(self._mic_device_label)
         self._mic_meter = LevelMeterWidget()
         mic_col.addWidget(self._mic_meter, stretch=1)
-        meters_row.addLayout(mic_col)
+        # Equal stretch on both columns (not the default 0/0) - otherwise Qt
+        # splits the row based on each QLabel's natural single-line sizeHint
+        # (word-wrap only affects the label once it's already been given a
+        # width), so a longer device name skews the split away from 50/50
+        # even though both meters should always get equal space.
+        meters_row.addLayout(mic_col, stretch=1)
 
         system_col = QVBoxLayout()
         self._system_device_label = QLabel()
@@ -284,7 +289,7 @@ class MainWindow(QMainWindow):
         system_col.addWidget(self._system_device_label)
         self._system_meter = LevelMeterWidget()
         system_col.addWidget(self._system_meter, stretch=1)
-        meters_row.addLayout(system_col)
+        meters_row.addLayout(system_col, stretch=1)
 
         layout.addLayout(meters_row, stretch=1)
 
@@ -451,9 +456,11 @@ class MainWindow(QMainWindow):
         # Recording and playback both want the same audio devices - keep
         # playback fully stopped (not just paused) for the whole recording,
         # not just re-disabled, so it can't be silently resumed from code.
+        # The transport row itself stays visible (see its construction
+        # above) - the Play button being disabled (_refresh_play_button)
+        # is what actually makes it unavailable during recording.
         self._media_player.stop()
         self._media_player.setSource(QUrl())
-        self._playback_row_widget.setVisible(False)
         self._refresh_play_button()
 
     def _reset_record_ui(self):
@@ -557,7 +564,12 @@ class MainWindow(QMainWindow):
         file_btn_row.addStretch()
         files_layout.addLayout(file_btn_row)
 
-        # Hidden until the first Play, so it never takes up space otherwise.
+        # Always visible (not just after the first Play) - a widget that
+        # starts hidden and only gets setVisible(True) later turned out to
+        # not reliably get laid out on every system (confirmed report: the
+        # row silently failed to ever appear on one machine until an
+        # unrelated layout change elsewhere happened to fix it) - always
+        # having it in the layout from the start removes that risk entirely.
         self._playback_row_widget = QWidget()
         playback_row = QHBoxLayout(self._playback_row_widget)
         playback_row.setContentsMargins(0, 0, 0, 0)
@@ -567,7 +579,6 @@ class MainWindow(QMainWindow):
         self._playback_slider.sliderMoved.connect(self._on_playback_slider_moved)
         playback_row.addWidget(self._playback_time_label)
         playback_row.addWidget(self._playback_slider, stretch=1)
-        self._playback_row_widget.setVisible(False)
         files_layout.addWidget(self._playback_row_widget)
 
         # Equal stretch with the transcript box below: a fixed 50/50 split
@@ -1157,7 +1168,6 @@ class MainWindow(QMainWindow):
     def _play_file(self, path: Path):
         self._media_player.setSource(QUrl.fromLocalFile(str(path)))
         self._media_player.play()
-        self._playback_row_widget.setVisible(True)
 
     def _release_playback_lock_on(self, path: Path):
         """Qt's media backend keeps an OS-level handle open on the currently
@@ -1184,9 +1194,11 @@ class MainWindow(QMainWindow):
         self._play_btn.setText(tr("Pause") if state == QMediaPlayer.PlayingState else tr("Play"))
         if state == QMediaPlayer.StoppedState:
             # Covers both a file playing to the end and _release_playback_lock_on()
-            # explicitly stopping playback (e.g. right before deleting that file) -
-            # otherwise the progress row was left showing a now-meaningless position.
-            self._playback_row_widget.setVisible(False)
+            # explicitly stopping playback (e.g. right before deleting that
+            # file) - resets the now-meaningless position instead of hiding
+            # the row, which stays visible at all times (see its construction).
+            self._playback_slider.setValue(0)
+            self._update_playback_time_label(0, 0)
 
     def _update_playback_time_label(self, position_ms, duration_ms):
         pos = core.format_time(position_ms / 1000)

@@ -24,7 +24,7 @@
 ; Output: packaging\dist\MeetingScribe-Setup-<version>.exe
 
 #define MyAppName "MeetingScribe"
-#define MyAppVersion "2.2.0"
+#define MyAppVersion "2.2.1"
 #define MyAppPublisher "Serhii Myshko"
 #define MyAppURL "https://github.com/sergeiown/MeetingScribe"
 #define SourceRoot "..\"
@@ -101,6 +101,13 @@ Type: filesandordirs; Name: "{app}\gui\__pycache__"
 [Code]
 var
   WipeDataOnUninstall: Boolean;
+
+const
+  SHCNE_ASSOCCHANGED = $08000000;
+  SHCNF_IDLIST = $0000;
+
+procedure SHChangeNotify(wEventId: Longint; uFlags: Longint; dwItem1, dwItem2: Longint);
+  external 'SHChangeNotify@shell32.dll stdcall';
 
 function InitializeUninstall(): Boolean;
 begin
@@ -237,5 +244,12 @@ begin
     InstallFfmpegIfMissing();
     WizardForm.StatusLabel.Caption := 'Finishing up...';
     WizardForm.Update;
+    // A fresh install's shortcuts/exe are brand new files - Explorer's own
+    // icon cache can still show a generic placeholder for them on the very
+    // first launch, only picking up the real icon.ico from the second
+    // launch onward (confirmed by direct report). This tells the shell to
+    // refresh its icon/association cache for what was just installed,
+    // rather than waiting for that to happen on its own.
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, 0, 0);
   end;
 end;
