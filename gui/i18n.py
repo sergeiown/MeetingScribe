@@ -51,13 +51,13 @@ _UK = {
     "Media files": "Медіафайли",
     "About MeetingScribe": "Про MeetingScribe",
     "<b>MeetingScribe</b> v{version}<br><br>"
-    "Local meeting transcription with speaker diarization and "
+    "Record meetings, then transcribe with speaker diarization and "
     "known-speaker recognition. Everything runs on this machine - "
     "no audio ever leaves the host.<br><br>"
     "MIT License © Serhii Myshko<br>"
     '<a href="https://github.com/sergeiown/MeetingScribe">github.com/sergeiown/MeetingScribe</a>':
         "<b>MeetingScribe</b> v{version}<br><br>"
-        "Локальна розшифровка нарад з розділенням за спікерами та "
+        "Записуй наради, потім розшифровуй їх з розділенням за спікерами та "
         "розпізнаванням відомих голосів. Все виконується на цьому "
         "комп'ютері - аудіо ніколи не залишає його.<br><br>"
         "Ліцензія MIT © Сергій Мишко<br>"

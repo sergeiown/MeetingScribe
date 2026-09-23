@@ -46,7 +46,7 @@ _STARTUP_UPDATE_CHECK_DELAY_MS = 10_000
 
 _ABOUT_TEXT = (
     "<b>MeetingScribe</b> v{version}<br><br>"
-    "Local meeting transcription with speaker diarization and "
+    "Record meetings, then transcribe with speaker diarization and "
     "known-speaker recognition. Everything runs on this machine - "
     "no audio ever leaves the host.<br><br>"
     "MIT License © Serhii Myshko<br>"
