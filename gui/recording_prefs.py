@@ -14,7 +14,7 @@ _EXCLUSIVE_KEY = "recording_exclusive"
 _HOTKEY_KEY = "recording_hotkey"
 _DEVICE_PREF_MIGRATED_KEY = "recording_device_pref_migrated_v1"
 
-DEFAULT_HOTKEY = "Alt+Backspace"
+DEFAULT_HOTKEY = ""  # off by default - opt-in only, set explicitly in Settings
 
 
 def _migrate_device_prefs_once() -> None:

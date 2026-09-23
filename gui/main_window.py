@@ -897,6 +897,13 @@ class MainWindow(QMainWindow):
 
     def _open_settings(self):
         prev_lang = get_language()
+        # Released for the dialog's whole lifetime, not just while the
+        # hotkey field itself has focus: while our own combination is still
+        # registered system-wide, pressing it is intercepted by Windows as
+        # the hotkey firing and never reaches any widget as a normal
+        # keystroke - confirmed by direct testing that this is exactly why
+        # re-entering the already-saved combination looked unresponsive.
+        self._hotkey_manager.unregister()
         SettingsDialog(self).exec()
         if get_language() != prev_lang:
             self.retranslate_ui()

@@ -443,12 +443,21 @@ class GeneralTab(QWidget):
             "Blocks other apps from using the microphone while recording. Only applies to the "
             "microphone - system-audio capture is always shared. Uses an older, secondary capture "
             "path that bypasses Windows' own audio processing - off by default: more reliable on "
-            "most microphones, and what the normal recording path already uses.\n\n"
-            "Warning: this will mute your microphone in other apps (e.g. Teams) for as long as "
-            "this app is recording, since it blocks them from the device entirely - leave this "
-            "off if you need to actually speak in a call while recording it."))
-        self._exclusive_checkbox.toggled.connect(set_exclusive_default)
+            "most microphones, and what the normal recording path already uses."))
+        self._exclusive_checkbox.toggled.connect(self._on_exclusive_toggled)
         box_layout.addWidget(self._exclusive_checkbox)
+
+        # A tooltip alone is too easy to never see - this is a real,
+        # surprising side effect (your own voice going silent in a live
+        # call), so it stays visible on the page whenever the mode is on,
+        # not just on hover.
+        self._exclusive_warning_label = QLabel(tr(
+            "⚠ Mutes your microphone in other apps (e.g. Teams) for as long as this app is "
+            "recording - leave this off if you need to actually speak in a call while recording it."))
+        self._exclusive_warning_label.setWordWrap(True)
+        self._exclusive_warning_label.setStyleSheet("color: #d97706; font-size: 11px;")
+        self._exclusive_warning_label.setVisible(self._exclusive_checkbox.isChecked())
+        box_layout.addWidget(self._exclusive_warning_label)
 
         hotkey_row = QHBoxLayout()
         hotkey_row.addWidget(QLabel(tr("Start/stop recording shortcut:")))
@@ -464,13 +473,23 @@ class GeneralTab(QWidget):
         self._hotkey_edit.keySequenceChanged.connect(
             lambda seq: set_hotkey(seq.toString()))
         hotkey_row.addWidget(self._hotkey_edit, stretch=1)
-        hotkey_reset_btn = QPushButton(tr("Reset"))
-        hotkey_reset_btn.clicked.connect(
+        hotkey_clear_btn = QPushButton(tr("Clear"))
+        hotkey_clear_btn.clicked.connect(
             lambda: self._hotkey_edit.setKeySequence(QKeySequence(DEFAULT_HOTKEY)))
-        hotkey_row.addWidget(hotkey_reset_btn)
+        hotkey_row.addWidget(hotkey_clear_btn)
         box_layout.addLayout(hotkey_row)
 
+        hotkey_hint = QLabel(tr("Off by default. Click the field above, then press the key combination "
+                                 "you want - it's captured immediately, no need to press Enter."))
+        hotkey_hint.setWordWrap(True)
+        hotkey_hint.setProperty("hint", True)
+        box_layout.addWidget(hotkey_hint)
+
         return box
+
+    def _on_exclusive_toggled(self, checked: bool):
+        set_exclusive_default(checked)
+        self._exclusive_warning_label.setVisible(checked)
 
     def _build_hardware_box(self):
         box = QGroupBox(tr("Hardware"))
