@@ -157,18 +157,11 @@ language (English/Українська) are all managed from **Settings**.
 
 ## Recording tip
 
-The built-in recorder (see [Features](#features)) covers most cases directly in
-the app. If you'd rather record with something else - or the audio comes from
-elsewhere (a phone, another app) - [OBS Studio](https://obsproject.com) (free
-and open-source) gives the cleanest results. Optimal audio settings:
-
-- **Settings → Audio → Sample Rate:** 44.1 kHz
-- **Settings → Audio → Channels:** Mono
-- **Settings → Output → Recording Format:** MP4
-
-Mono speech is all the tool needs (it downmixes to 16 kHz mono internally) and it
-keeps files small. Stop the recording properly so the file finalizes (an
-unfinished recording can be unreadable).
+Use the built-in recorder (see [Features](#features)) - check **Microphone**
+and/or **System audio** and click **Record**. It handles the audio format
+automatically, so there's nothing to configure. Always click **Stop** to
+finish, rather than closing the app mid-recording, so the file finalizes
+correctly.
 
 ## Output format
 
