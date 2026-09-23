@@ -69,9 +69,8 @@ _UK = {
     "<li>In the recording panel on the left, check <b>Microphone</b> and/or <b>System audio</b>, "
     "then click <b>Record</b>. Use <b>Pause</b>/<b>Resume</b> as needed, and <b>Stop</b> to finish - "
     "the new file appears in the list on the right automatically.</li>"
-    "<li>System audio always records in shared mode (other apps can keep using it at the same time). "
-    "The microphone can optionally use exclusive mode instead, in <b>Settings</b> - it blocks other "
-    "apps from using it while you record.</li>"
+    "<li>Both sources always record in shared mode, so other apps can keep using the same "
+    "microphone/output device at the same time.</li>"
     "</ol>"
     "<b>Playback</b>"
     "<ol>"
@@ -95,9 +94,8 @@ _UK = {
         "<li>У панелі запису зліва постав галочку на <b>Мікрофон</b> і/або <b>Системний звук</b>, "
         "потім натисни <b>Record</b>. Користуйся <b>Pause</b>/<b>Resume</b> за потреби, і <b>Stop</b>, "
         "щоб завершити - новий файл автоматично з'явиться у списку справа.</li>"
-        "<li>Системний звук завжди записується у спільному режимі (інші програми можуть користуватися "
-        "ним одночасно). Мікрофон, за бажанням, може використовувати ексклюзивний режим - у "
-        "<b>Settings</b> - він блокує іншим програмам доступ до мікрофона, поки триває запис.</li>"
+        "<li>Обидва джерела завжди записуються у спільному режимі, тож інші програми можуть "
+        "користуватися тим самим мікрофоном/пристроєм виводу одночасно.</li>"
         "</ol>"
         "<b>Відтворення</b>"
         "<ol>"
@@ -248,19 +246,6 @@ _UK = {
     "Microphone device:": "Пристрій мікрофона:",
     "System audio device:": "Пристрій системного звуку:",
     "System default": "За замовчуванням у системі",
-    "Exclusive mode for microphone recording": "Ексклюзивний режим для запису з мікрофона",
-    "Blocks other apps from using the microphone while recording. Only applies to the "
-    "microphone - system-audio capture is always shared. Uses an older, secondary capture "
-    "path that bypasses Windows' own audio processing - off by default: more reliable on "
-    "most microphones, and what the normal recording path already uses.":
-        "Блокує іншим програмам доступ до мікрофона під час запису. Стосується лише мікрофона - "
-        "запис системного звуку завжди спільний. Використовує старіший, другорядний шлях захоплення, "
-        "що минає власну обробку звуку Windows - вимкнено за замовчуванням: надійніше працює з "
-        "більшістю мікрофонів, і саме це вже використовує звичайний шлях запису.",
-    "⚠ Mutes your microphone in other apps (e.g. Teams) for as long as this app is "
-    "recording - leave this off if you need to actually speak in a call while recording it.":
-        "⚠ Заглушить мікрофон в інших програмах (наприклад, Teams) на весь час запису - "
-        "лиши вимкненим, якщо потрібно реально говорити в дзвінку, поки він записується.",
     "Start/stop recording shortcut:": "Сполучення клавіш для запису/зупинки:",
     "Works system-wide, even while another app (like Teams) has focus - the same "
     "combination both starts and stops a recording.":

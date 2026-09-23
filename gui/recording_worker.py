@@ -20,11 +20,11 @@ class RecordingController(QObject):
     error = Signal(str)     # RecordingError message, or an unexpected mid-recording stop
     stopped = Signal(str)   # final file path, once stop() completes
 
-    def __init__(self, devices, out_path, *, exclusive: bool, parent=None):
+    def __init__(self, devices, out_path, parent=None):
         """devices: [(core.AudioDevice, is_loopback), ...] - one entry for a
         single source, two for simultaneous mic+system."""
         super().__init__(parent)
-        self._recorder = core.Recorder(devices, out_path, exclusive=exclusive)
+        self._recorder = core.Recorder(devices, out_path)
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._drain)
 

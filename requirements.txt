@@ -7,14 +7,12 @@ numpy>=1.24.0
 # GUI
 PySide6>=6.6
 
-# Audio recording: microphone (shared + WASAPI exclusive mode) and
-# system-audio loopback capture. Neither the bundled ffmpeg build nor
-# QtMultimedia's QAudioSource can do either on Windows (confirmed by direct
-# testing) - sounddevice handles the microphone (its WasapiSettings(exclusive=)
-# is the only one of the two that reliably supports exclusive mode; soundcard's
-# own exclusive_mode raises "invalid argument" on real hardware), soundcard
-# handles system-audio loopback (sounddevice's installed build has no loopback
-# support at all - no such parameter exists on its WasapiSettings).
+# Audio recording: microphone (shared WASAPI capture) and system-audio
+# loopback capture. Neither the bundled ffmpeg build nor QtMultimedia's
+# QAudioSource can do either on Windows (confirmed by direct testing) -
+# sounddevice handles the microphone, soundcard handles system-audio
+# loopback (sounddevice's installed build has no loopback support at all -
+# no such parameter exists on its WasapiSettings).
 sounddevice>=0.4.6
 soundcard>=0.4.3
 scipy>=1.10.0

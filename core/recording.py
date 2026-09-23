@@ -1,11 +1,11 @@
-"""Live audio recording: microphone (shared or WASAPI-exclusive) and
-system-audio loopback, unified behind one Recorder interface - and both at
-once, mixed down into a single output file.
+"""Live audio recording: microphone and system-audio loopback, unified
+behind one Recorder interface - and both at once, mixed down into a single
+output file. Both sources always record in shared mode - other apps can
+keep using the same microphone/output device at the same time.
 
 Two backends, chosen per source, both confirmed by direct testing on real
 hardware:
-- Microphone: sounddevice, i.e. WASAPI directly (shared by default,
-  optionally sd.WasapiSettings(exclusive=True)). An ffmpeg/dshow-based
+- Microphone: sounddevice, i.e. WASAPI directly. An ffmpeg/dshow-based
   microphone engine was tried in between and reverted: it looked
   attractive (mature, external capture pipeline, matched the user's own
   side-by-side OBS comparison) but direct testing with a real Bluetooth
@@ -18,7 +18,7 @@ hardware:
   Hands-Free-Profile connection worse than a native WASAPI session does,
   which is also almost certainly why OBS (WASAPI-based, not DirectShow)
   never showed this problem on the same hardware in the user's own test.
-  WASAPI is therefore the one microphone backend, in both modes.
+  WASAPI is therefore the one microphone backend.
 - System-audio loopback: soundcard, via sc.get_microphone(name,
   include_loopback=True). sounddevice's installed build has no loopback
   support at all (no such parameter exists on its WasapiSettings), and
@@ -27,33 +27,24 @@ hardware:
   wasapi) - dshow's usual loopback route ("Stereo Mix") is a legacy
   device that's absent or disabled on most modern hardware.
 
-Exclusive mode is only ever honored for a microphone entry - loopback
-capture of system/output audio is architecturally always shared in
-Windows (OBS, Discord, this app, ... can all tap the same render stream
-simultaneously by design), so there's no stronger "exclusive" variant to
-request for it.
-
-On some real hardware, a WASAPI *exclusive-mode* stream's actual delivered
-throughput does not match the rate it was opened with/reports (confirmed
-by direct testing: one real microphone's exclusive-mode stream, opened at
-a requested/reported 48000 Hz, actually delivered audio at ~66000-71000 Hz,
-varying between separate recordings by a few percent). Shared mode did
-not show this (its small ~2% timing error matched plain measurement
-noise). Rather than branch behavior on the mode, every source is measured
-and corrected the same way: PortAudio's own per-callback device-clock
-timestamp (time_info.currentTime) gives each microphone's true rate
-without any Python-side wall-clock jitter (thread wake-up latency, GIL
-scheduling) - confirmed far tighter than measuring wall-clock time around
-the recording (0.0-0.2% error vs several percent). Loopback has no
-equivalent timestamp, so it falls back to wall-clock timing. Each
-source's raw captured audio is written untouched to its own temporary
-file during the session and resampled exactly once at stop(), with
-scipy.signal.resample_poly - a proper polyphase FIR resampler with
-anti-aliasing, meant for real, non-periodic audio like speech (unlike the
-FFT-based resample(), which assumes one periodic cycle and can ring/
-distort on real recordings) - onto a fixed target rate. Only then are the
-(now equally and correctly timed) sources mixed and written to the final
-WAV."""
+On some real hardware, a WASAPI mic stream's actual delivered throughput
+does not exactly match the rate it was opened with/reports (confirmed by
+direct testing: a real microphone's stream, opened at a requested/reported
+48000 Hz, measured a true rate a couple percent off that, varying a little
+between separate recordings). Every source is measured and corrected the
+same way regardless: PortAudio's own per-callback device-clock timestamp
+(time_info.currentTime) gives each microphone's true rate without any
+Python-side wall-clock jitter (thread wake-up latency, GIL scheduling) -
+confirmed far tighter than measuring wall-clock time around the recording
+(0.0-0.2% error vs several percent). Loopback has no equivalent timestamp,
+so it falls back to wall-clock timing. Each source's raw captured audio is
+written untouched to its own temporary file during the session and
+resampled exactly once at stop(), with scipy.signal.resample_poly - a
+proper polyphase FIR resampler with anti-aliasing, meant for real,
+non-periodic audio like speech (unlike the FFT-based resample(), which
+assumes one periodic cycle and can ring/distort on real recordings) - onto
+a fixed target rate. Only then are the (now equally and correctly timed)
+sources mixed and written to the final WAV."""
 
 import logging
 import queue
@@ -103,7 +94,7 @@ def _start_with_retry(start_fn) -> None:
 
 class RecordingError(Exception):
     """Recording could not start, or stopped unexpectedly (device busy,
-    exclusive mode denied, device disconnected mid-recording)."""
+    device disconnected mid-recording)."""
 
 
 @dataclass
@@ -117,15 +108,14 @@ class AudioDevice:
 
 def _classify_open_error(e: Exception) -> str:
     low = str(e).lower()
-    if "invalid number of channels" in low or "invalid sample rate" in low or "invalid argument" in low:
-        return "This device is already in use by another app, or refused exclusive access."
-    if "device unavailable" in low or "unanticipated host error" in low:
+    if ("invalid number of channels" in low or "invalid sample rate" in low or "invalid argument" in low
+            or "device unavailable" in low or "unanticipated host error" in low):
         return "This device is already in use by another app."
     return f"Could not open this device: {e}"
 
 
 def list_microphones() -> list:
-    """WASAPI-capable input devices - the only ones exclusive mode applies to."""
+    """WASAPI-capable input devices."""
     import sounddevice as sd
     # PortAudio builds its device table once, at initialization, and does
     # not notice devices plugged/unplugged afterward (confirmed: a
@@ -184,11 +174,10 @@ class _SourceStream:
     float32 blocks into its own queue - mixing/writing happens outside,
     in Recorder, so this class knows nothing about the output file."""
 
-    def __init__(self, device: AudioDevice, loopback: bool, exclusive: bool,
+    def __init__(self, device: AudioDevice, loopback: bool,
                  channels: int, samplerate: int, on_error):
         self.device = device
         self.loopback = loopback
-        self.exclusive = exclusive and not loopback
         self.channels = channels
         self.samplerate = samplerate
         self._on_error = on_error
@@ -214,8 +203,6 @@ class _SourceStream:
     def _start_microphone(self):
         import sounddevice as sd
 
-        settings = sd.WasapiSettings(exclusive=True) if self.exclusive else None
-
         def callback(indata, frames, time_info, status):
             if status:
                 _log.debug("Recording stream status: %s", status)
@@ -227,8 +214,7 @@ class _SourceStream:
         try:
             self._stream = sd.InputStream(
                 device=self.device.sd_index, channels=self.channels, samplerate=self.samplerate,
-                dtype="float32", extra_settings=settings, callback=callback,
-                finished_callback=self._on_finished)
+                dtype="float32", callback=callback, finished_callback=self._on_finished)
             self._stream.start()
         except Exception as e:
             self._stream = None
@@ -324,14 +310,12 @@ class Recorder:
     (measuring each source's true rate, resampling, mixing) happens once,
     in stop() - see module docstring for why."""
 
-    def __init__(self, devices, out_path, *, exclusive: bool = False):
+    def __init__(self, devices, out_path):
         """devices: [(AudioDevice, is_loopback), ...] - one entry for a
         single source, two for simultaneous mic+system (mixed down to one
-        output file, see module docstring). exclusive only ever applies to
-        a microphone entry."""
+        output file, see module docstring)."""
         self._device_specs = list(devices)
         self._out_path = Path(out_path)
-        self._exclusive = exclusive
         self._sources = []
         self._events = queue.Queue()
         self._mix_thread = None
@@ -361,7 +345,7 @@ class Recorder:
         self._workdir = Path(tempfile.mkdtemp(prefix="meetingscribe_rec_"))
 
         self._sources = [
-            _SourceStream(device, loopback, self._exclusive, src_channels,
+            _SourceStream(device, loopback, src_channels,
                           int(device.default_samplerate) or _TARGET_RATE,
                           on_error=lambda msg: self._events.put(("error", msg)))
             for (device, loopback), src_channels in zip(self._device_specs, self._source_channels)
@@ -403,9 +387,9 @@ class Recorder:
         self._drain_and_meter()  # final drain since the last tick
 
     def pause(self) -> None:
-        """Keeps the underlying streams open (avoids re-opening an exclusive
-        device) - just stops writing audio to the file and freezes the
-        elapsed-time counter."""
+        """Keeps the underlying streams open (avoids re-opening the device) -
+        just stops writing audio to the file and freezes the elapsed-time
+        counter."""
         if self._paused_since is None:
             self._paused_since = time.monotonic()
 

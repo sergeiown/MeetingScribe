@@ -24,7 +24,7 @@ from .recording_prefs import (
     get_use_microphone, set_use_microphone,
     get_use_system_audio, set_use_system_audio,
     get_mic_device_name, get_loopback_device_name,
-    get_exclusive_default, get_hotkey,
+    get_hotkey,
 )
 from .recording_worker import RecordingController
 from .taskbar_overlay import TaskbarOverlay
@@ -59,9 +59,8 @@ _HOW_TO_USE_TEXT = (
     "<li>In the recording panel on the left, check <b>Microphone</b> and/or <b>System audio</b>, "
     "then click <b>Record</b>. Use <b>Pause</b>/<b>Resume</b> as needed, and <b>Stop</b> to finish - "
     "the new file appears in the list on the right automatically.</li>"
-    "<li>System audio always records in shared mode (other apps can keep using it at the same time). "
-    "The microphone can optionally use exclusive mode instead, in <b>Settings</b> - it blocks other "
-    "apps from using it while you record.</li>"
+    "<li>Both sources always record in shared mode, so other apps can keep using the same "
+    "microphone/output device at the same time.</li>"
     "</ol>"
     "<b>Playback</b>"
     "<ol>"
@@ -431,7 +430,7 @@ class MainWindow(QMainWindow):
         core.ensure_workdirs()
         out_path = core.INPUT_DIR / f"Recording {datetime.now():%Y-%m-%d %H-%M-%S}.wav"
 
-        controller = RecordingController(devices, out_path, exclusive=get_exclusive_default())
+        controller = RecordingController(devices, out_path)
         controller.levels.connect(self._on_recording_levels)
         controller.error.connect(self._on_recording_error)
         controller.stopped.connect(self._on_recording_stopped)

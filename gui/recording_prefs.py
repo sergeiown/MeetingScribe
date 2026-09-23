@@ -1,8 +1,8 @@
-"""Recording preferences (which sources are active, device choice, exclusive
-mode default), stored like device_prefs.py. Device *name* is persisted, not
-a numeric index - indices aren't stable across reboots or when USB audio
-devices are plugged in a different order. A device name of None/"" means
-"system default", resolved fresh at recording time rather than pinned."""
+"""Recording preferences (which sources are active, device choice), stored
+like device_prefs.py. Device *name* is persisted, not a numeric index -
+indices aren't stable across reboots or when USB audio devices are plugged
+in a different order. A device name of None/"" means "system default",
+resolved fresh at recording time rather than pinned."""
 
 from PySide6.QtCore import QSettings
 
@@ -10,7 +10,6 @@ _USE_MIC_KEY = "recording_use_mic"
 _USE_SYSTEM_KEY = "recording_use_system"
 _MIC_DEVICE_KEY = "recording_mic_device"
 _LOOPBACK_DEVICE_KEY = "recording_loopback_device"
-_EXCLUSIVE_KEY = "recording_exclusive"
 _HOTKEY_KEY = "recording_hotkey"
 _DEVICE_PREF_MIGRATED_KEY = "recording_device_pref_migrated_v1"
 
@@ -68,25 +67,6 @@ def get_loopback_device_name():
 
 def set_loopback_device_name(name) -> None:
     QSettings("MeetingScribe", "MeetingScribe").setValue(_LOOPBACK_DEVICE_KEY, name or "")
-
-
-def get_exclusive_default() -> bool:
-    # Off by default: most recording software (Audacity, OBS, Voice Recorder,
-    # Zoom, Teams, ...) defaults microphone capture to shared mode, not
-    # exclusive - exclusive mode bypasses Windows' own audio engine entirely
-    # and goes straight to the driver, which is fine for a professional audio
-    # interface but often less reliable on generic/onboard mic chips.
-    # Confirmed by direct testing: on one such device, repeated 5s exclusive-
-    # mode captures measured a real throughput ratio that visibly varied
-    # run to run (1.4555/1.4355/1.4554), while shared mode was consistent to
-    # four decimal places (0.9358/0.9357/0.9359) every time - a real
-    # reliability difference, not just a one-off fluke. Still available as
-    # an opt-in toggle for anyone whose hardware handles it well.
-    return QSettings("MeetingScribe", "MeetingScribe").value(_EXCLUSIVE_KEY, False, type=bool)
-
-
-def set_exclusive_default(value: bool) -> None:
-    QSettings("MeetingScribe", "MeetingScribe").setValue(_EXCLUSIVE_KEY, value)
 
 
 def get_hotkey() -> str:

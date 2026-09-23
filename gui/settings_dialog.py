@@ -17,7 +17,6 @@ from .device_prefs import get_device_preference, set_device_preference
 from .hardware_icons import cpu_icon_path, gpu_icon_path
 from .i18n import tr, available_languages, get_language, set_language
 from .recording_prefs import (
-    get_exclusive_default, set_exclusive_default,
     get_mic_device_name, set_mic_device_name,
     get_loopback_device_name, set_loopback_device_name,
     get_hotkey, set_hotkey, DEFAULT_HOTKEY,
@@ -483,28 +482,6 @@ class GeneralTab(QWidget):
         loopback_block.addWidget(self._loopback_device_combo)
         box_layout.addLayout(loopback_block)
 
-        self._exclusive_checkbox = QCheckBox(tr("Exclusive mode for microphone recording"))
-        self._exclusive_checkbox.setChecked(get_exclusive_default())
-        self._exclusive_checkbox.setToolTip(tr(
-            "Blocks other apps from using the microphone while recording. Only applies to the "
-            "microphone - system-audio capture is always shared. Uses an older, secondary capture "
-            "path that bypasses Windows' own audio processing - off by default: more reliable on "
-            "most microphones, and what the normal recording path already uses."))
-        self._exclusive_checkbox.toggled.connect(self._on_exclusive_toggled)
-        box_layout.addWidget(self._exclusive_checkbox)
-
-        # A tooltip alone is too easy to never see - this is a real,
-        # surprising side effect (your own voice going silent in a live
-        # call), so it stays visible on the page whenever the mode is on,
-        # not just on hover.
-        self._exclusive_warning_label = QLabel(tr(
-            "⚠ Mutes your microphone in other apps (e.g. Teams) for as long as this app is "
-            "recording - leave this off if you need to actually speak in a call while recording it."))
-        self._exclusive_warning_label.setWordWrap(True)
-        self._exclusive_warning_label.setStyleSheet("color: #d97706; font-size: 11px;")
-        self._exclusive_warning_label.setVisible(self._exclusive_checkbox.isChecked())
-        box_layout.addWidget(self._exclusive_warning_label)
-
         hotkey_row = QHBoxLayout()
         hotkey_row.addWidget(QLabel(tr("Start/stop recording shortcut:")))
         self._hotkey_display = QPushButton()
@@ -534,10 +511,6 @@ class GeneralTab(QWidget):
     def _on_hotkey_clear(self):
         set_hotkey(DEFAULT_HOTKEY)
         self._update_hotkey_display()
-
-    def _on_exclusive_toggled(self, checked: bool):
-        set_exclusive_default(checked)
-        self._exclusive_warning_label.setVisible(checked)
 
     def _build_hardware_box(self):
         box = QGroupBox(tr("Hardware"))
