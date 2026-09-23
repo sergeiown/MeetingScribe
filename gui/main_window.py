@@ -834,11 +834,9 @@ class MainWindow(QMainWindow):
         isn't available right now."""
         if not has_package:
             return tr("Speaker diarization isn't available in this install.")
-        if not has_token and models_missing:
+        if models_missing and not has_token:
             return tr("Enter a Hugging Face token and download the diarization "
                       "models in Settings > Models.")
-        if not has_token:
-            return tr("Enter a Hugging Face token in Settings > Models to enable this.")
         if models_missing:
             return tr("Diarization models aren't downloaded yet - get them from Settings > Models.")
         return ""
@@ -849,9 +847,15 @@ class MainWindow(QMainWindow):
         # Independent of has_token so a missing token and missing models both
         # surface together, since a fresh install commonly has neither yet.
         models_missing = has_package and not core.is_diarization_complete()
+        # A token is only ever needed to DOWNLOAD the gated models in the
+        # first place - once they're fully cached locally, both the
+        # diarization pipeline and the embedding model load fully offline
+        # (core/diarization.py, core/speakers.py force HF_HUB_OFFLINE=1 in
+        # that case) and never re-verify the token or license acceptance
+        # over the network, so it's no longer required at that point.
         # Cached for _on_diarize_checkbox_clicked, which needs to know
         # whether a click should be allowed to stick.
-        self._diarize_available = has_package and has_token and not models_missing
+        self._diarize_available = has_package and not models_missing
         self._diarize_unavailable_reason = self._diarize_unavailable_message(
             has_package, has_token, models_missing)
 
@@ -892,7 +896,7 @@ class MainWindow(QMainWindow):
         has_token = bool(core.read_hf_token())
         has_package = core.has_diarization_support()
         models_missing = has_package and not core.is_diarization_complete()
-        available = has_package and has_token and not models_missing
+        available = has_package and not models_missing
         selected = self._selected_files()
         diarizable = available and any(core.file_status(f)[1] for f in selected)
         self._diarize_btn.setEnabled(diarizable and self._worker is None)

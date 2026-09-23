@@ -44,7 +44,7 @@ def set_use_microphone(value: bool) -> None:
 
 
 def get_use_system_audio() -> bool:
-    return QSettings("MeetingScribe", "MeetingScribe").value(_USE_SYSTEM_KEY, False, type=bool)
+    return QSettings("MeetingScribe", "MeetingScribe").value(_USE_SYSTEM_KEY, True, type=bool)
 
 
 def set_use_system_audio(value: bool) -> None:
