@@ -10,49 +10,67 @@ versions) - that placement isn't something an app controls."""
 import ctypes
 from ctypes import wintypes
 
-import comtypes
-import comtypes.client
-from comtypes import COMMETHOD, GUID, HRESULT, IUnknown
 from PySide6.QtGui import QColor, QPainter, QPixmap
 
-_CLSID_TaskbarList = GUID("{56FDF344-FD6D-11D0-958A-006097C9A090}")
-_IID_ITaskbarList3 = GUID("{EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF}")
+_CLSID_TaskbarList = "{56FDF344-FD6D-11D0-958A-006097C9A090}"
+_IID_ITaskbarList3 = "{EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF}"
+
+# comtypes (a pip package, not stdlib) is deliberately never imported at
+# module scope here, and _ITaskbarList3 is deliberately built lazily inside
+# a function rather than as a top-level class - core/__init__.py-style
+# modules are imported unconditionally as part of a plain `import gui.
+# main_window`, well before gui/bootstrap.py's dependency-install step has
+# run on a fresh install (whose venv has nothing but PySide6 yet); a
+# module-level `import comtypes` or a class body referencing comtypes.GUID/
+# IUnknown at class-definition time would crash that import outright.
+# Confirmed live: this exact pattern (for numpy/scipy in core/recording.py)
+# is what broke a clean v2.2.0 install with no visible error.
+_itaskbarlist3_cls = None
 
 
-class _ITaskbarList3(IUnknown):
-    _iid_ = _IID_ITaskbarList3
-    _methods_ = [
-        COMMETHOD([], HRESULT, "HrInit"),
-        COMMETHOD([], HRESULT, "AddTab", (['in'], wintypes.HWND, 'hwnd')),
-        COMMETHOD([], HRESULT, "DeleteTab", (['in'], wintypes.HWND, 'hwnd')),
-        COMMETHOD([], HRESULT, "ActivateTab", (['in'], wintypes.HWND, 'hwnd')),
-        COMMETHOD([], HRESULT, "SetActiveAlt", (['in'], wintypes.HWND, 'hwnd')),
-        COMMETHOD([], HRESULT, "MarkFullscreenWindow",
-                  (['in'], wintypes.HWND, 'hwnd'), (['in'], wintypes.BOOL, 'fFullscreen')),
-        COMMETHOD([], HRESULT, "SetProgressValue", (['in'], wintypes.HWND, 'hwnd'),
-                  (['in'], ctypes.c_ulonglong, 'ullCompleted'), (['in'], ctypes.c_ulonglong, 'ullTotal')),
-        COMMETHOD([], HRESULT, "SetProgressState",
-                  (['in'], wintypes.HWND, 'hwnd'), (['in'], ctypes.c_int, 'tbpFlags')),
-        COMMETHOD([], HRESULT, "RegisterTab",
-                  (['in'], wintypes.HWND, 'hwndTab'), (['in'], wintypes.HWND, 'hwndMDI')),
-        COMMETHOD([], HRESULT, "UnregisterTab", (['in'], wintypes.HWND, 'hwndTab')),
-        COMMETHOD([], HRESULT, "SetTabOrder",
-                  (['in'], wintypes.HWND, 'hwndTab'), (['in'], wintypes.HWND, 'hwndInsertBefore')),
-        COMMETHOD([], HRESULT, "SetTabActive", (['in'], wintypes.HWND, 'hwndTab'),
-                  (['in'], wintypes.HWND, 'hwndMDI'), (['in'], ctypes.c_uint, 'dwReserved')),
-        COMMETHOD([], HRESULT, "ThumbBarAddButtons", (['in'], wintypes.HWND, 'hwnd'),
-                  (['in'], ctypes.c_uint, 'cButtons'), (['in'], ctypes.c_void_p, 'pButton')),
-        COMMETHOD([], HRESULT, "ThumbBarUpdateButtons", (['in'], wintypes.HWND, 'hwnd'),
-                  (['in'], ctypes.c_uint, 'cButtons'), (['in'], ctypes.c_void_p, 'pButton')),
-        COMMETHOD([], HRESULT, "ThumbBarSetImageList",
-                  (['in'], wintypes.HWND, 'hwnd'), (['in'], ctypes.c_void_p, 'himl')),
-        COMMETHOD([], HRESULT, "SetOverlayIcon", (['in'], wintypes.HWND, 'hwnd'),
-                  (['in'], wintypes.HICON, 'hIcon'), (['in'], wintypes.LPCWSTR, 'pszDescription')),
-        COMMETHOD([], HRESULT, "SetThumbnailTooltip",
-                  (['in'], wintypes.HWND, 'hwnd'), (['in'], wintypes.LPCWSTR, 'pszTip')),
-        COMMETHOD([], HRESULT, "SetThumbnailClip",
-                  (['in'], wintypes.HWND, 'hwnd'), (['in'], ctypes.c_void_p, 'prcClip')),
-    ]
+def _get_itaskbarlist3_cls():
+    global _itaskbarlist3_cls
+    if _itaskbarlist3_cls is not None:
+        return _itaskbarlist3_cls
+    from comtypes import COMMETHOD, GUID, HRESULT, IUnknown
+
+    class _ITaskbarList3(IUnknown):
+        _iid_ = GUID(_IID_ITaskbarList3)
+        _methods_ = [
+            COMMETHOD([], HRESULT, "HrInit"),
+            COMMETHOD([], HRESULT, "AddTab", (['in'], wintypes.HWND, 'hwnd')),
+            COMMETHOD([], HRESULT, "DeleteTab", (['in'], wintypes.HWND, 'hwnd')),
+            COMMETHOD([], HRESULT, "ActivateTab", (['in'], wintypes.HWND, 'hwnd')),
+            COMMETHOD([], HRESULT, "SetActiveAlt", (['in'], wintypes.HWND, 'hwnd')),
+            COMMETHOD([], HRESULT, "MarkFullscreenWindow",
+                      (['in'], wintypes.HWND, 'hwnd'), (['in'], wintypes.BOOL, 'fFullscreen')),
+            COMMETHOD([], HRESULT, "SetProgressValue", (['in'], wintypes.HWND, 'hwnd'),
+                      (['in'], ctypes.c_ulonglong, 'ullCompleted'), (['in'], ctypes.c_ulonglong, 'ullTotal')),
+            COMMETHOD([], HRESULT, "SetProgressState",
+                      (['in'], wintypes.HWND, 'hwnd'), (['in'], ctypes.c_int, 'tbpFlags')),
+            COMMETHOD([], HRESULT, "RegisterTab",
+                      (['in'], wintypes.HWND, 'hwndTab'), (['in'], wintypes.HWND, 'hwndMDI')),
+            COMMETHOD([], HRESULT, "UnregisterTab", (['in'], wintypes.HWND, 'hwndTab')),
+            COMMETHOD([], HRESULT, "SetTabOrder",
+                      (['in'], wintypes.HWND, 'hwndTab'), (['in'], wintypes.HWND, 'hwndInsertBefore')),
+            COMMETHOD([], HRESULT, "SetTabActive", (['in'], wintypes.HWND, 'hwndTab'),
+                      (['in'], wintypes.HWND, 'hwndMDI'), (['in'], ctypes.c_uint, 'dwReserved')),
+            COMMETHOD([], HRESULT, "ThumbBarAddButtons", (['in'], wintypes.HWND, 'hwnd'),
+                      (['in'], ctypes.c_uint, 'cButtons'), (['in'], ctypes.c_void_p, 'pButton')),
+            COMMETHOD([], HRESULT, "ThumbBarUpdateButtons", (['in'], wintypes.HWND, 'hwnd'),
+                      (['in'], ctypes.c_uint, 'cButtons'), (['in'], ctypes.c_void_p, 'pButton')),
+            COMMETHOD([], HRESULT, "ThumbBarSetImageList",
+                      (['in'], wintypes.HWND, 'hwnd'), (['in'], ctypes.c_void_p, 'himl')),
+            COMMETHOD([], HRESULT, "SetOverlayIcon", (['in'], wintypes.HWND, 'hwnd'),
+                      (['in'], wintypes.HICON, 'hIcon'), (['in'], wintypes.LPCWSTR, 'pszDescription')),
+            COMMETHOD([], HRESULT, "SetThumbnailTooltip",
+                      (['in'], wintypes.HWND, 'hwnd'), (['in'], wintypes.LPCWSTR, 'pszTip')),
+            COMMETHOD([], HRESULT, "SetThumbnailClip",
+                      (['in'], wintypes.HWND, 'hwnd'), (['in'], ctypes.c_void_p, 'prcClip')),
+        ]
+
+    _itaskbarlist3_cls = _ITaskbarList3
+    return _ITaskbarList3
 
 
 class TaskbarOverlay:
@@ -65,7 +83,11 @@ class TaskbarOverlay:
         self._hicon = None
         self._taskbar = None
         try:
-            self._taskbar = comtypes.client.CreateObject(_CLSID_TaskbarList, interface=_ITaskbarList3)
+            import comtypes.client
+            from comtypes import GUID
+            itaskbarlist3_cls = _get_itaskbarlist3_cls()
+            self._taskbar = comtypes.client.CreateObject(
+                GUID(_CLSID_TaskbarList), interface=itaskbarlist3_cls)
             self._taskbar.HrInit()
         except Exception:
             self._taskbar = None

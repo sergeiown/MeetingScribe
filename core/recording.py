@@ -46,6 +46,8 @@ assumes one periodic cycle and can ring/distort on real recordings) - onto
 a fixed target rate. Only then are the (now equally and correctly timed)
 sources mixed and written to the final WAV."""
 
+from __future__ import annotations
+
 import logging
 import queue
 import tempfile
@@ -57,8 +59,17 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
-from scipy.signal import resample_poly
+# numpy/scipy are imported lazily, inside each function that needs them (see
+# below) rather than here at module scope - core/__init__.py imports this
+# module unconditionally as part of a plain `import core`, which must stay
+# possible before those two (like torch elsewhere in core/) are actually
+# installed - otherwise a fresh install, whose venv has nothing but PySide6
+# until gui/bootstrap.py's dependency-install step runs, crashes immediately
+# on `import core` itself, before that step ever gets a chance to run
+# (confirmed live: this is exactly what broke a clean v2.2.0 install with no
+# visible error, since pythonw.exe has no console to show the traceback on).
+# `from __future__ import annotations` keeps the `-> np.ndarray` return-type
+# hints below from needing numpy to exist at def-time either.
 
 _log = logging.getLogger(__name__)
 
@@ -274,6 +285,7 @@ class _SourceStream:
 
     def drain(self) -> np.ndarray:
         """Whatever's queued right now, concatenated into one array (may be empty)."""
+        import numpy as np
         chunks = []
         try:
             while True:
@@ -403,6 +415,7 @@ class Recorder:
         return self._paused_since is not None
 
     def _drain_and_meter(self):
+        import numpy as np
         blocks = [src.drain() for src in self._sources]
         per_source_peaks = [float(np.abs(b).max()) if b.size else 0.0 for b in blocks]
         if self._paused_since is None:
@@ -475,6 +488,8 @@ class Recorder:
 
     def _load_and_resample(self, path: Path, frames_written: int, active_duration: float,
                             src_channels: int) -> np.ndarray:
+        import numpy as np
+        from scipy.signal import resample_poly
         if frames_written == 0 or active_duration <= 0:
             return np.zeros((0, self._channels), dtype=np.float32)
         raw = np.fromfile(path, dtype=np.float32).reshape(-1, src_channels)
@@ -495,12 +510,14 @@ class Recorder:
         return raw.mean(axis=1, keepdims=True).repeat(self._channels, axis=1)
 
     def _mix_final(self, sources: list) -> np.ndarray:
+        import numpy as np
         n = min(s.shape[0] for s in sources)
         if n == 0:
             return np.zeros((0, self._channels), dtype=np.float32)
         return sum(s[:n] * _MIX_GAIN for s in sources)
 
     def _write_wav(self, mixed: np.ndarray) -> None:
+        import numpy as np
         wf = wave.open(str(self._out_path), "wb")
         try:
             wf.setnchannels(self._channels)
