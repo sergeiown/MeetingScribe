@@ -544,7 +544,12 @@ class MainWindow(QMainWindow):
         self._empty_hint = QLabel(tr("No files yet - click \"Add files...\" or drop some into input\\"))
         self._empty_hint.setProperty("hint", True)
         self._empty_hint.setAlignment(Qt.AlignCenter)
-        files_layout.addWidget(self._empty_hint)
+        # Same stretch=1 as the table above - exactly one of the two is ever
+        # visible, and a hidden widget doesn't claim its stretch share, so
+        # without this the file-list buttons/transport row below ended up at
+        # some Qt-internal-default position instead of reliably pinned to
+        # the bottom of the box when there are no files yet.
+        files_layout.addWidget(self._empty_hint, stretch=1)
 
         file_btn_row = QHBoxLayout()
         self._add_btn = QPushButton(tr("Add files..."))
