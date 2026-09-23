@@ -157,8 +157,10 @@ language (English/Українська) are all managed from **Settings**.
 
 ## Recording tip
 
-For the cleanest results, record with [OBS Studio](https://obsproject.com) (free
-and open-source). Optimal audio settings:
+The built-in recorder (see [Features](#features)) covers most cases directly in
+the app. If you'd rather record with something else - or the audio comes from
+elsewhere (a phone, another app) - [OBS Studio](https://obsproject.com) (free
+and open-source) gives the cleanest results. Optimal audio settings:
 
 - **Settings → Audio → Sample Rate:** 44.1 kHz
 - **Settings → Audio → Channels:** Mono
