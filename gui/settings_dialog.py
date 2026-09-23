@@ -438,9 +438,10 @@ class GeneralTab(QWidget):
         self._exclusive_checkbox = QCheckBox(tr("Exclusive mode for microphone recording"))
         self._exclusive_checkbox.setChecked(get_exclusive_default())
         self._exclusive_checkbox.setToolTip(tr(
-            "Blocks other apps from using the microphone while recording. "
-            "Only applies to the microphone - system-audio capture is always shared. "
-            "Off by default: more reliable on most built-in/generic microphones."))
+            "Blocks other apps from using the microphone while recording. Only applies to the "
+            "microphone - system-audio capture is always shared. Uses an older, secondary capture "
+            "path that bypasses Windows' own audio processing - off by default: more reliable on "
+            "most microphones, and what the normal recording path already uses."))
         self._exclusive_checkbox.toggled.connect(set_exclusive_default)
         box_layout.addWidget(self._exclusive_checkbox)
 
