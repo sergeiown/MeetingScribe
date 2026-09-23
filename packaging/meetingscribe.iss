@@ -24,7 +24,7 @@
 ; Output: packaging\dist\MeetingScribe-Setup-<version>.exe
 
 #define MyAppName "MeetingScribe"
-#define MyAppVersion "2.1.3"
+#define MyAppVersion "2.2.0"
 #define MyAppPublisher "Serhii Myshko"
 #define MyAppURL "https://github.com/sergeiown/MeetingScribe"
 #define SourceRoot "..\"
