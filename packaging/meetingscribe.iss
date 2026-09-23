@@ -129,7 +129,19 @@ begin
   // Runs after Inno's own removal is done, so {app} here holds only the
   // untracked data dirs - wiping it removes exactly the "my data" half.
   if (CurUninstallStep = usPostUninstall) and WipeDataOnUninstall then
+  begin
     DelTree(ExpandConstant('{app}'), True, True, True);
+    // QSettings("MeetingScribe", "MeetingScribe") lives in the registry
+    // (HKCU\Software\MeetingScribe\MeetingScribe), completely separate from
+    // {app} - never touched above, so it survived every uninstall until
+    // now regardless of this same "full clean removal" choice, including
+    // theme/language/recording-device/hotkey preferences (confirmed live:
+    // a reinstall on a machine that had MeetingScribe before still showed
+    // its old language preference). Gated on the same choice as the data
+    // wipe above, for the same reason: "No, keep my data" implies the user
+    // means to reinstall later and pick up where they left off.
+    RegDeleteKeyIncludingSubkeys(HKCU, 'Software\MeetingScribe');
+  end;
 end;
 
 function IsPythonInstalled(): Boolean;
