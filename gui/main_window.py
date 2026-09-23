@@ -39,6 +39,7 @@ _MIN_WIDTH = 920
 _MIN_HEIGHT = 480
 _SIDEBAR_WIDTH = 300
 _RECORDING_PANEL_WIDTH = 260
+_RECORD_COUNTDOWN_SECONDS = 3
 _STARTUP_UPDATE_CHECK_DELAY_MS = 10_000
 
 _ABOUT_TEXT = (
@@ -96,6 +97,15 @@ class MainWindow(QMainWindow):
         self._recording_devices = []
         self._elapsed_timer = QTimer(self)
         self._elapsed_timer.timeout.connect(self._update_elapsed_label)
+        # A real device (WASAPI/Bluetooth especially) takes a moment to
+        # actually start delivering audio after being opened - confirmed by
+        # direct testing to lose real content at the very start otherwise.
+        # This countdown just delays when recording *actually* starts until
+        # after that open-latency window has already passed, the same way
+        # a camera app's shutter countdown covers its own shutter lag.
+        self._countdown_remaining = 0
+        self._countdown_timer = QTimer(self)
+        self._countdown_timer.timeout.connect(self._on_countdown_tick)
         # Reflects which device would actually be used right now - reruns
         # periodically (not just on Settings-close) so plugging in a
         # different microphone updates the label without needing to open
@@ -311,7 +321,32 @@ class MainWindow(QMainWindow):
             self._system_device_label.setText(speaker.name if speaker else tr("No output device found"))
 
     def _on_record_clicked(self):
-        self._start_recording()
+        if self._countdown_timer.isActive():
+            self._cancel_countdown()
+        else:
+            self._begin_countdown()
+
+    def _begin_countdown(self):
+        self._countdown_remaining = _RECORD_COUNTDOWN_SECONDS
+        self._record_btn.setText(tr("Cancel"))
+        self._mic_checkbox.setEnabled(False)
+        self._system_checkbox.setEnabled(False)
+        self._record_elapsed_label.setText(str(self._countdown_remaining))
+        self._countdown_timer.start(1000)
+
+    def _cancel_countdown(self):
+        self._countdown_timer.stop()
+        self._record_btn.setText(tr("Record"))
+        self._reset_record_ui()
+
+    def _on_countdown_tick(self):
+        self._countdown_remaining -= 1
+        if self._countdown_remaining <= 0:
+            self._countdown_timer.stop()
+            self._record_btn.setText(tr("Record"))
+            self._start_recording()
+        else:
+            self._record_elapsed_label.setText(str(self._countdown_remaining))
 
     def _on_pause_clicked(self):
         if self._recording_controller is None:
@@ -324,6 +359,9 @@ class MainWindow(QMainWindow):
             self._pause_btn.setText(tr("Resume"))
 
     def _start_recording(self):
+        # Checkboxes are already disabled (the countdown that leads here
+        # disables them) - every early return below must re-enable them,
+        # since there's no later success path left to do it instead.
         use_mic = self._mic_checkbox.isChecked()
         use_system = self._system_checkbox.isChecked()
 
@@ -331,12 +369,14 @@ class MainWindow(QMainWindow):
         if use_mic:
             mic = core.resolve_device(core.list_microphones(), get_mic_device_name())
             if mic is None:
+                self._reset_record_ui()
                 QMessageBox.information(self, tr("Record"), tr("No microphone available."))
                 return
             devices.append((mic, False))
         if use_system:
             speaker = core.resolve_device(core.list_loopback_outputs(), get_loopback_device_name())
             if speaker is None:
+                self._reset_record_ui()
                 QMessageBox.information(self, tr("Record"), tr("No system-audio output device available."))
                 return
             devices.append((speaker, True))
@@ -351,6 +391,7 @@ class MainWindow(QMainWindow):
         try:
             controller.start()
         except core.RecordingError as e:
+            self._reset_record_ui()
             QMessageBox.warning(self, tr("Recording failed"), str(e))
             return
 
@@ -360,6 +401,11 @@ class MainWindow(QMainWindow):
         self._set_active_record_row_visible(True)
         self._mic_checkbox.setEnabled(False)
         self._system_checkbox.setEnabled(False)
+
+    def _reset_record_ui(self):
+        self._mic_checkbox.setEnabled(True)
+        self._system_checkbox.setEnabled(True)
+        self._record_elapsed_label.setText("00:00")
 
     def _stop_recording(self):
         if self._recording_controller is None:
@@ -636,7 +682,9 @@ class MainWindow(QMainWindow):
         self._system_checkbox.setText(tr("System audio"))
         self._update_active_device_labels()
         self._stop_btn.setText(tr("Stop"))
-        if self._recording_controller is None:
+        if self._countdown_timer.isActive():
+            self._record_btn.setText(tr("Cancel"))
+        elif self._recording_controller is None:
             self._record_btn.setText(tr("Record"))
         else:
             self._pause_btn.setText(tr("Resume") if self._recording_controller.is_paused else tr("Pause"))

@@ -441,7 +441,10 @@ class GeneralTab(QWidget):
             "Blocks other apps from using the microphone while recording. Only applies to the "
             "microphone - system-audio capture is always shared. Uses an older, secondary capture "
             "path that bypasses Windows' own audio processing - off by default: more reliable on "
-            "most microphones, and what the normal recording path already uses."))
+            "most microphones, and what the normal recording path already uses.\n\n"
+            "Warning: this will mute your microphone in other apps (e.g. Teams) for as long as "
+            "this app is recording, since it blocks them from the device entirely - leave this "
+            "off if you need to actually speak in a call while recording it."))
         self._exclusive_checkbox.toggled.connect(set_exclusive_default)
         box_layout.addWidget(self._exclusive_checkbox)
 

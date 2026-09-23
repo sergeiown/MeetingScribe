@@ -250,11 +250,17 @@ _UK = {
     "Blocks other apps from using the microphone while recording. Only applies to the "
     "microphone - system-audio capture is always shared. Uses an older, secondary capture "
     "path that bypasses Windows' own audio processing - off by default: more reliable on "
-    "most microphones, and what the normal recording path already uses.":
+    "most microphones, and what the normal recording path already uses.\n\n"
+    "Warning: this will mute your microphone in other apps (e.g. Teams) for as long as "
+    "this app is recording, since it blocks them from the device entirely - leave this "
+    "off if you need to actually speak in a call while recording it.":
         "Блокує іншим програмам доступ до мікрофона під час запису. Стосується лише мікрофона - "
         "запис системного звуку завжди спільний. Використовує старіший, другорядний шлях захоплення, "
         "що минає власну обробку звуку Windows - вимкнено за замовчуванням: надійніше працює з "
-        "більшістю мікрофонів, і саме це вже використовує звичайний шлях запису.",
+        "більшістю мікрофонів, і саме це вже використовує звичайний шлях запису.\n\n"
+        "Увага: це заглушить мікрофон в інших програмах (наприклад, Teams) на весь час запису, "
+        "оскільки повністю блокує їм доступ до пристрою - лиши вимкненим, якщо потрібно реально "
+        "говорити в дзвінку, поки він записується.",
     "Hardware": "Обладнання",
     "CPU: {name}": "CPU: {name}",
     "GPU: {name}": "GPU: {name}",
