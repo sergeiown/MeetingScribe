@@ -17,6 +17,7 @@ PySide6>=6.6
 # support at all - no such parameter exists on its WasapiSettings).
 sounddevice>=0.4.6
 soundcard>=0.4.3
+scipy>=1.10.0
 
 # pyannote deps
 omegaconf>=2.3.0

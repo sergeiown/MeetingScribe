@@ -22,39 +22,37 @@ Discord, ...) can all tap the same render stream simultaneously by design,
 so there is no stronger "exclusive" variant to request for it. `exclusive`
 is therefore only ever honored for a microphone source.
 
-Recording both sources at once mixes them (simple summed gain, not
-loudness-normalized) into one output file rather than two separate tracks -
-this app's pipeline (and its transcript UI) is built around one audio file
-per recording, and a meeting recording wants both sides of the
-conversation in the same transcript anyway. The two sources are captured
-by independently-clocked devices with no shared timeline, so they're
-mixed by simply truncating each tick's blocks to the shortest one - plain,
-standard practice for live-mixing asynchronous sources, adequate for
-speech transcription, not for professional multi-track work.
+On some real hardware, a WASAPI stream's actual delivered throughput does
+not reliably match the rate it was opened with/reports - confirmed by
+direct testing (one real microphone's exclusive-mode stream, opened at a
+requested/reported 48000 Hz, actually delivered audio at ~66000-71000 Hz,
+varying between separate recordings by a few percent even with nothing
+else changed). A short calibration measurement (tried first, several
+window sizes) could not pin this down reliably enough: repeating the same
+short measurement back to back kept landing at different values, and
+whichever one a given recording happened to get became that whole file's
+label - occasionally sped up or slowed down enough to be clearly audible.
 
-On some real hardware, a WASAPI *exclusive-mode* stream's actual delivered
-throughput does not match the rate it was opened with/reports (confirmed
-by direct testing: one real microphone's exclusive-mode stream, opened at
-a requested/reported 48000 Hz, actually delivered audio at a fairly
-constant ~70000 Hz - a genuine driver quirk, not a measurement error,
-reproduced with a minimal capture-and-write script with no custom
-processing at all). Shared mode did not show this on the same hardware
-(its small ~2% timing error matched plain measurement/loop overhead), so
-it is trusted as-is; only exclusive mode is measured (see start()). The
-fix used here is deliberately the simplest, standard one: measure the real
-throughput once, briefly, right after opening the stream, and declare
-*that* measured rate in the WAV header - then write every subsequently
-captured PCM frame completely unmodified for the rest of the session. No
-resampling, no interpolation, no per-tick correction: those were tried
-first and, despite being individually correct in isolation, kept
-introducing their own new artifacts (a phase break at every tick boundary,
-then a chunking/timing mismatch in the loopback pull) - each fix for the
-last bug became the next bug. Trusting a single calibration and leaving
-the audio data itself completely untouched removes that whole class of
-problem."""
+The fix used here mirrors how established recording software (confirmed
+directly: OBS via its own WASAPI capture, same hardware, same microphone)
+avoids this problem - it never trusts a short sample of device timing, and
+it never hand-rolls a resampler. Every source's raw captured audio is
+written untouched to its own temporary file during the session; at
+stop(), each source's *true* rate is computed from the one measurement
+that actually is reliable - total frames captured divided by the
+recording's total real (wall-clock, pause-excluded) duration, averaged
+over the entire session rather than a short window - and then the whole
+per-source signal is resampled exactly once, with scipy.signal.resample
+(a real, tested DSP routine, not a hand-written interpolation loop), onto
+a fixed target rate. Only then are the (now equally and correctly timed)
+sources mixed and written to the final WAV. This is deliberately the
+simplest structure that is still correct: one clean measurement per
+session, one library resampling call per source, no per-tick math to get
+subtly wrong."""
 
 import logging
 import queue
+import tempfile
 import threading
 import time
 import wave
@@ -63,12 +61,13 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+from scipy.signal import resample
 
 _log = logging.getLogger(__name__)
 
-_CHUNK_SECONDS = 0.05  # mix-tick interval and meter update grain
-_CALIBRATION_SECONDS = 1.0  # see module docstring
+_CHUNK_SECONDS = 0.05  # live meter update grain only - no longer tied to any resampling
 _MIX_GAIN = 0.7  # per source when mixing two, so simultaneous loud sources don't clip
+_TARGET_RATE = 48000  # every recording is resampled to this, regardless of what the device actually did
 
 
 class RecordingError(Exception):
@@ -259,7 +258,14 @@ class _SourceStream:
 
 class Recorder:
     """One recording session: create, start, poll drain_events(), stop,
-    discard. Not reusable across sessions."""
+    discard. Not reusable across sessions.
+
+    Nothing is mixed or rate-corrected while recording - each source's raw
+    captured audio streams straight to its own temporary file (bounded
+    memory regardless of recording length, same crash-safety profile as
+    writing the final file incrementally would have). All the real work
+    (measuring each source's true rate over the whole session, resampling,
+    mixing) happens once, in stop() - see module docstring for why."""
 
     def __init__(self, devices, out_path, *, exclusive: bool = False):
         """devices: [(AudioDevice, is_loopback), ...] - one entry for a
@@ -271,15 +277,19 @@ class Recorder:
         self._exclusive = exclusive
         self._sources = []
         self._events = queue.Queue()
-        self._wav = None
         self._mix_thread = None
         self._stop_flag = threading.Event()
         self._start_time = None
         self._paused_since = None
         self._paused_accum = 0.0
+        self._channels = 1
+        self._raw_paths = []
+        self._raw_files = []
+        self._raw_frame_counts = []
 
     def start(self) -> None:
         channels = max(1, min(max(d.channels for d, _ in self._device_specs), 2))
+        self._channels = channels
         requested_samplerate = int(self._device_specs[0][0].default_samplerate) or 48000
 
         self._sources = [
@@ -298,50 +308,20 @@ class Recorder:
             self._sources = []
             raise
 
-        # elapsed_seconds() measures from this same moment, since the
-        # calibration window's audio (if any, see below) is captured and
-        # written too - the displayed elapsed time should match the file.
-        self._start_time = time.monotonic()
-
-        # Shared mode's declared/reported rate matched real throughput in
-        # direct testing (~2% error, consistent with plain measurement
-        # noise) - only exclusive mode showed a genuine, large mismatch
-        # (confirmed on real hardware: a "48000 Hz" exclusive stream
-        # actually delivering ~70000 Hz), so only it needs measuring.
-        # Calibrating shared mode too was tried and made things worse: its
-        # first ~1s under-measures (a real ramp-up transient - confirmed by
-        # direct testing showing an artificially low rate specifically in
-        # that opening window), so a calibration that helps exclusive mode
-        # would have mislabeled shared mode's file instead.
-        calib_blocks = None
-        if self._exclusive:
-            calib_t0 = time.monotonic()
-            time.sleep(_CALIBRATION_SECONDS)
-            calib_elapsed = time.monotonic() - calib_t0
-            calib_blocks = [src.drain() for src in self._sources]
-            primary_frames = calib_blocks[0].shape[0]
-            measured_rate = int(round(primary_frames / calib_elapsed)) if primary_frames else requested_samplerate
-            if not (8000 <= measured_rate <= 192000):
-                # Implausible (e.g. near-total silence during calibration) -
-                # fall back rather than write a nonsense framerate.
-                measured_rate = requested_samplerate
-        else:
-            measured_rate = requested_samplerate
-
         try:
-            self._wav = wave.open(str(self._out_path), "wb")
-            self._wav.setnchannels(channels)
-            self._wav.setsampwidth(2)
-            self._wav.setframerate(measured_rate)
+            self._raw_paths = [
+                Path(tempfile.mkstemp(prefix="meetingscribe_rec_", suffix=f".src{i}.raw")[1])
+                for i in range(len(self._sources))
+            ]
+            self._raw_files = [open(p, "wb") for p in self._raw_paths]
         except OSError as e:
             for src in self._sources:
                 src.stop()
             self._sources = []
-            raise RecordingError(f"Could not create the recording file: {e}") from e
+            raise RecordingError(f"Could not create a temporary recording file: {e}") from e
+        self._raw_frame_counts = [0] * len(self._sources)
 
-        if calib_blocks is not None:
-            self._mix_and_write(calib_blocks)  # don't lose the calibration-window audio
-
+        self._start_time = time.monotonic()
         self._stop_flag.clear()
         self._mix_thread = threading.Thread(target=self._mix_loop, daemon=True)
         self._mix_thread.start()
@@ -349,8 +329,8 @@ class Recorder:
     def _mix_loop(self):
         while not self._stop_flag.is_set():
             time.sleep(_CHUNK_SECONDS)
-            self._mix_and_write([src.drain() for src in self._sources])
-        self._mix_and_write([src.drain() for src in self._sources])  # final drain since the last tick
+            self._drain_and_meter()
+        self._drain_and_meter()  # final drain since the last tick
 
     def pause(self) -> None:
         """Keeps the underlying streams open (avoids re-opening an exclusive
@@ -368,31 +348,17 @@ class Recorder:
     def is_paused(self) -> bool:
         return self._paused_since is not None
 
-    def _mix_and_write(self, blocks):
-        if self._paused_since is not None:
-            # Still drained (by the caller) so the source queues don't grow
-            # unbounded while paused - just not written or metered as audio.
-            self._events.put(("levels", [0.0] * len(blocks)))
-            return
-
-        # Per-source peaks, computed before mixing, so the GUI can show one
-        # meter per active source (mic + system) instead of one blended number.
+    def _drain_and_meter(self):
+        blocks = [src.drain() for src in self._sources]
         per_source_peaks = [float(np.abs(b).max()) if b.size else 0.0 for b in blocks]
-        if len(blocks) == 1:
-            mixed = blocks[0]
-        else:
-            n = min(b.shape[0] for b in blocks)
-            if n == 0:
-                mixed = np.zeros((0, blocks[0].shape[1]), dtype=np.float32)
-            else:
-                mixed = sum(b[:n] * _MIX_GAIN for b in blocks)
-        if mixed.size:
-            pcm16 = np.clip(mixed * 32767.0, -32768, 32767).astype(np.int16)
-            if self._wav is not None:
-                try:
-                    self._wav.writeframes(pcm16.tobytes())
-                except Exception:
-                    pass  # already closed by stop()
+        if self._paused_since is None:
+            for i, block in enumerate(blocks):
+                if block.size:
+                    try:
+                        self._raw_files[i].write(block.astype(np.float32, copy=False).tobytes())
+                        self._raw_frame_counts[i] += block.shape[0]
+                    except Exception:
+                        pass  # already closed by stop()
         self._events.put(("levels", per_source_peaks))
 
     def drain_events(self) -> list:
@@ -420,16 +386,58 @@ class Recorder:
         for src in self._sources:
             src.stop()
         self._sources = []
-        self._close_wav()
-        return self._out_path
 
-    def _close_wav(self):
-        if self._wav is not None:
+        # The one number that's actually reliable: total frames captured
+        # over the *entire* active (pause-excluded) session, not a short
+        # sample of it - see module docstring.
+        active_duration = self.elapsed_seconds()
+        for f in self._raw_files:
             try:
-                self._wav.close()
+                f.close()
             except Exception:
                 pass
-            self._wav = None
+        self._raw_files = []
+
+        resampled = []
+        for path, frames in zip(self._raw_paths, self._raw_frame_counts):
+            resampled.append(self._load_and_resample(path, frames, active_duration))
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        self._raw_paths = []
+
+        mixed = resampled[0] if len(resampled) == 1 else self._mix_final(resampled)
+        self._write_wav(mixed)
+        return self._out_path
+
+    def _load_and_resample(self, path: Path, frames_written: int, active_duration: float) -> np.ndarray:
+        if frames_written == 0 or active_duration <= 0:
+            return np.zeros((0, self._channels), dtype=np.float32)
+        raw = np.fromfile(path, dtype=np.float32).reshape(-1, self._channels)
+        true_rate = frames_written / active_duration
+        if not (8000 <= true_rate <= 192000):
+            return raw  # implausible measurement - use as captured rather than distort it further
+        target_frames = max(1, round(raw.shape[0] * _TARGET_RATE / true_rate))
+        return resample(raw, target_frames, axis=0).astype(np.float32)
+
+    def _mix_final(self, sources: list) -> np.ndarray:
+        n = min(s.shape[0] for s in sources)
+        if n == 0:
+            return np.zeros((0, self._channels), dtype=np.float32)
+        return sum(s[:n] * _MIX_GAIN for s in sources)
+
+    def _write_wav(self, mixed: np.ndarray) -> None:
+        wf = wave.open(str(self._out_path), "wb")
+        try:
+            wf.setnchannels(self._channels)
+            wf.setsampwidth(2)
+            wf.setframerate(_TARGET_RATE)
+            if mixed.size:
+                pcm16 = np.clip(mixed * 32767.0, -32768, 32767).astype(np.int16)
+                wf.writeframes(pcm16.tobytes())
+        finally:
+            wf.close()
 
     @property
     def is_recording(self) -> bool:
