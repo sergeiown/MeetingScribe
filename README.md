@@ -42,6 +42,11 @@ falls back to a plain transcript with timestamps.
 ## Features
 
 - Native desktop GUI (Windows) - no command line needed for everyday use.
+- Built-in recording: microphone, system audio (what's playing through your
+  speakers/headset), or both at once, mixed into one file - with live level
+  meters, pause/resume, a 3-2-1 countdown so nothing gets clipped at the
+  start, a system-wide start/stop shortcut, and a recording-in-progress
+  badge on the taskbar icon.
 - Fully local - runs offline once models are downloaded; no audio uploaded anywhere.
 - Speaker diarization (who spoke when) via pyannote `speaker-diarization-3.1`.
 - Recognition and speaker identification are separate steps: run both at once,
