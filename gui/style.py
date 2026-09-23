@@ -64,6 +64,13 @@ def apply_theme() -> None:
         app.setStyleSheet(build_stylesheet(dark=resolve_dark_mode()))
 
 
+def current_colors() -> dict:
+    """The active theme's color dict, resolved fresh each call - lets other
+    widgets (e.g. the level meters) match the current theme's accent color
+    instead of hardcoding one of their own."""
+    return _colors(resolve_dark_mode())
+
+
 def _colors(dark: bool) -> dict:
     if dark:
         return dict(

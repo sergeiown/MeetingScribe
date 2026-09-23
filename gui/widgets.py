@@ -10,6 +10,7 @@ from PySide6.QtGui import QColor, QPainter, QLinearGradient, QBrush, QPen, QPain
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QProgressBar, QSizePolicy, QWidget
 
 from .i18n import tr
+from .style import current_colors
 
 # Every button that can appear in this row-of-cards area, so they all end up
 # the same width - Save token (in the token card) included, even though it
@@ -58,7 +59,7 @@ class LevelMeterWidget(QWidget):
 
     _DECAY = 0.94  # per set_level() call - the meter is driven at ~25fps, so this reads as a fast but visible fall-off
     _MIN_DB = -48.0
-    _SCALE_MARKS = (-40, -20, -12, -6, -3, 0)
+    _SCALE_MARKS = (-40, -20, -12, -6, 0)  # -3 dropped: too close to 0 to fit both labels without overlap
     _SCALE_TEXT_WIDTH = 24
     _READOUT_HEIGHT = 14
     _CORNER_RADIUS = 5.0
@@ -89,15 +90,18 @@ class LevelMeterWidget(QWidget):
         return (db - self._MIN_DB) / (0.0 - self._MIN_DB)
 
     def paintEvent(self, event):
+        colors = current_colors()
+        accent = QColor(colors["accent"])
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
         rect = self.rect()
         bar_w = max(1, rect.width() - self._SCALE_TEXT_WIDTH)
         bar_h = max(1, rect.height() - self._READOUT_HEIGHT)
+        label_h = self.fontMetrics().height()
         track_rect = QRectF(0.0, 0.0, bar_w, bar_h)
 
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor("#1c1c1c"))
+        painter.setBrush(QColor(colors["input_bg"]).darker(115))
         painter.drawRoundedRect(track_rect, self._CORNER_RADIUS, self._CORNER_RADIUS)
 
         level_frac = self._to_frac(self._level)
@@ -110,10 +114,13 @@ class LevelMeterWidget(QWidget):
             clip_path.addRoundedRect(track_rect, self._CORNER_RADIUS, self._CORNER_RADIUS)
             painter.setClipPath(clip_path)
             fill_rect = QRectF(0.0, bar_h - fill_h, bar_w, fill_h)
+            # Theme accent color for the normal range; only the last stretch
+            # right below 0 dB (clipping territory) turns into a warning
+            # color, instead of the whole bar being green regardless of theme.
             gradient = QLinearGradient(0.0, bar_h, 0.0, 0.0)
-            gradient.setColorAt(0.0, QColor("#27ae60"))
-            gradient.setColorAt(0.60, QColor("#2ecc71"))
-            gradient.setColorAt(0.80, QColor("#f1c40f"))
+            gradient.setColorAt(0.0, accent.darker(130))
+            gradient.setColorAt(0.75, accent)
+            gradient.setColorAt(0.92, QColor("#f1c40f"))
             gradient.setColorAt(1.0, QColor("#e74c3c"))
             painter.setBrush(QBrush(gradient))
             painter.drawRect(fill_rect)
@@ -122,23 +129,31 @@ class LevelMeterWidget(QWidget):
         peak_frac = self._to_frac(self._peak_hold)
         if peak_frac > 0:
             peak_y = bar_h - peak_frac * bar_h
-            painter.setPen(QPen(QColor("#f5f5f5"), 2))
+            painter.setPen(QPen(QColor(colors["text"]), 2))
             painter.drawLine(QPointF(2, peak_y), QPointF(bar_w - 2, peak_y))
 
-        painter.setPen(QColor("#8a8a8a"))
+        painter.setPen(QColor(colors["hint"]))
         font = painter.font()
         font.setPointSize(7)
         painter.setFont(font)
-        for mark_db in self._SCALE_MARKS:
+        # Processed top to bottom (highest dB first) so each label can be
+        # pushed down below the previous one if the scale is too compressed
+        # for both to fit at their exact dB position without overlapping -
+        # on top of the edge-clamping below, which alone isn't enough when
+        # two marks (like -3 and 0) land within a label-height of each other.
+        prev_bottom = 0.0
+        for mark_db in sorted(self._SCALE_MARKS, reverse=True):
             f = (mark_db - self._MIN_DB) / (0.0 - self._MIN_DB)
             y = bar_h - f * bar_h
-            painter.drawText(QRectF(bar_w + 4, y - 6, self._SCALE_TEXT_WIDTH - 4, 12),
+            label_top = min(max(y - label_h / 2, prev_bottom), bar_h - label_h)
+            prev_bottom = label_top + label_h
+            painter.drawText(QRectF(bar_w + 4, label_top, self._SCALE_TEXT_WIDTH - 4, label_h),
                               Qt.AlignVCenter | Qt.AlignLeft, str(mark_db))
 
         # Below the bar, clearly separated from the "0" scale mark at the
         # top - level with it read as if it were (mis)labeling that mark.
         peak_db = self._MIN_DB if self._peak_hold <= 0 else max(self._MIN_DB, 20.0 * math.log10(self._peak_hold))
-        painter.setPen(QColor("#cccccc"))
+        painter.setPen(QColor(colors["text"]))
         painter.drawText(QRectF(0, bar_h + 2, rect.width(), self._READOUT_HEIGHT), Qt.AlignCenter,
                           tr("Peak: {db} dB", db=f"{peak_db:.0f}"))
         painter.end()
