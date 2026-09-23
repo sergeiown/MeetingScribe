@@ -8,7 +8,7 @@ from pathlib import Path
 import core
 
 from PySide6.QtCore import Qt, QSettings, QThread, QTimer, QUrl
-from PySide6.QtGui import QDesktopServices, QTextCursor, QColor
+from PySide6.QtGui import QDesktopServices, QTextCursor, QColor, QFont, QFontMetrics
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMainWindow, QWidget, QVBoxLayout,
@@ -18,14 +18,16 @@ from PySide6.QtWidgets import (
 )
 
 from .device_prefs import get_device_preference
+from .global_hotkey import GlobalHotkeyManager
 from .i18n import tr, get_language
 from .recording_prefs import (
     get_use_microphone, set_use_microphone,
     get_use_system_audio, set_use_system_audio,
     get_mic_device_name, get_loopback_device_name,
-    get_exclusive_default,
+    get_exclusive_default, get_hotkey,
 )
 from .recording_worker import RecordingController
+from .taskbar_overlay import TaskbarOverlay
 from .settings_dialog import SettingsDialog
 from .style import get_prevent_sleep_preference
 from .dialogs import SpeakerNameDialog
@@ -115,6 +117,13 @@ class MainWindow(QMainWindow):
         self._device_label_timer = QTimer(self)
         self._device_label_timer.timeout.connect(self._update_active_device_labels)
         self._device_label_timer.start(2000)
+
+        # Red taskbar-icon badge while recording, and a system-wide
+        # start/stop shortcut usable even while a call (Teams, ...) has
+        # focus instead of this app - see their own modules for why.
+        self._taskbar_overlay = TaskbarOverlay(self)
+        self._hotkey_manager = GlobalHotkeyManager()
+        self._register_hotkey()
 
         # Created once, reused across files - independent of the recording
         # subsystem above (sounddevice/soundcard); playback is 100% QtMultimedia.
@@ -230,12 +239,23 @@ class MainWindow(QMainWindow):
         meters_row = QHBoxLayout()
         meters_row.setSpacing(12)
 
+        # Fixed at exactly 2 lines' worth of height regardless of the
+        # actual device name's length - otherwise a longer name that wraps
+        # to 2 lines on one side (vs. 1 on the other) leaves that column
+        # less room overall, so its meter would render visibly shorter
+        # than its neighbor even though both columns share the same total
+        # panel height.
+        device_label_font = QFont()
+        device_label_font.setPixelSize(9)
+        device_label_height = QFontMetrics(device_label_font).height() * 2 + 2
+
         mic_col = QVBoxLayout()
         self._mic_device_label = QLabel()
         self._mic_device_label.setProperty("hint", True)
         self._mic_device_label.setAlignment(Qt.AlignCenter)
         self._mic_device_label.setWordWrap(True)
         self._mic_device_label.setStyleSheet("font-size: 9px;")
+        self._mic_device_label.setFixedHeight(device_label_height)
         mic_col.addWidget(self._mic_device_label)
         self._mic_meter = LevelMeterWidget()
         mic_col.addWidget(self._mic_meter, stretch=1)
@@ -247,6 +267,7 @@ class MainWindow(QMainWindow):
         self._system_device_label.setAlignment(Qt.AlignCenter)
         self._system_device_label.setWordWrap(True)
         self._system_device_label.setStyleSheet("font-size: 9px;")
+        self._system_device_label.setFixedHeight(device_label_height)
         system_col.addWidget(self._system_device_label)
         self._system_meter = LevelMeterWidget()
         system_col.addWidget(self._system_meter, stretch=1)
@@ -319,6 +340,18 @@ class MainWindow(QMainWindow):
         if self._system_checkbox.isChecked():
             speaker = core.resolve_device(core.list_loopback_outputs(), get_loopback_device_name())
             self._system_device_label.setText(speaker.name if speaker else tr("No output device found"))
+
+    def _register_hotkey(self):
+        self._hotkey_manager.set_hotkey(get_hotkey(), self._on_hotkey_pressed)
+
+    def _on_hotkey_pressed(self):
+        """Same binding starts and stops - whichever is valid right now."""
+        if self._countdown_timer.isActive():
+            self._cancel_countdown()
+        elif self._recording_controller is not None:
+            self._stop_recording()
+        else:
+            self._begin_countdown()
 
     def _on_record_clicked(self):
         if self._countdown_timer.isActive():
@@ -401,6 +434,7 @@ class MainWindow(QMainWindow):
         self._set_active_record_row_visible(True)
         self._mic_checkbox.setEnabled(False)
         self._system_checkbox.setEnabled(False)
+        self._taskbar_overlay.set_recording(True)
 
     def _reset_record_ui(self):
         self._mic_checkbox.setEnabled(True)
@@ -435,6 +469,7 @@ class MainWindow(QMainWindow):
         self._set_active_record_row_visible(False)
         self._mic_checkbox.setEnabled(True)
         self._system_checkbox.setEnabled(True)
+        self._taskbar_overlay.set_recording(False)
         self._refresh_file_list(select_all=False)
         self._select_file_by_path(Path(path_str))
 
@@ -869,6 +904,7 @@ class MainWindow(QMainWindow):
             self._refresh_model_choices()
             self._refresh_diarize_availability()
         self._update_active_device_labels()
+        self._register_hotkey()
 
     def _show_about(self):
         QMessageBox.about(self, tr("About MeetingScribe"), tr(_ABOUT_TEXT, version=core.VERSION))

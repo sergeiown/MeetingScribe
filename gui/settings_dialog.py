@@ -5,11 +5,12 @@ from pathlib import Path
 import core
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QIcon
+from PySide6.QtGui import QPixmap, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QHeaderView, QTableWidget, QTableWidgetItem, QLineEdit, QPushButton, QComboBox,
     QLabel, QMessageBox, QInputDialog, QFileDialog, QScrollArea, QFrame, QCheckBox,
+    QKeySequenceEdit,
 )
 
 from .device_prefs import get_device_preference, set_device_preference
@@ -19,6 +20,7 @@ from .recording_prefs import (
     get_exclusive_default, set_exclusive_default,
     get_mic_device_name, set_mic_device_name,
     get_loopback_device_name, set_loopback_device_name,
+    get_hotkey, set_hotkey, DEFAULT_HOTKEY,
 )
 from .style import (
     apply_theme, get_theme_preference, set_theme_preference,
@@ -447,6 +449,26 @@ class GeneralTab(QWidget):
             "off if you need to actually speak in a call while recording it."))
         self._exclusive_checkbox.toggled.connect(set_exclusive_default)
         box_layout.addWidget(self._exclusive_checkbox)
+
+        hotkey_row = QHBoxLayout()
+        hotkey_row.addWidget(QLabel(tr("Start/stop recording shortcut:")))
+        self._hotkey_edit = QKeySequenceEdit()
+        try:
+            self._hotkey_edit.setMaximumSequenceLength(1)
+        except AttributeError:
+            pass  # older PySide6 - harmless, only the first chord is ever used anyway
+        self._hotkey_edit.setKeySequence(QKeySequence(get_hotkey()))
+        self._hotkey_edit.setToolTip(tr(
+            "Works system-wide, even while another app (like Teams) has focus - the same "
+            "combination both starts and stops a recording."))
+        self._hotkey_edit.keySequenceChanged.connect(
+            lambda seq: set_hotkey(seq.toString()))
+        hotkey_row.addWidget(self._hotkey_edit, stretch=1)
+        hotkey_reset_btn = QPushButton(tr("Reset"))
+        hotkey_reset_btn.clicked.connect(
+            lambda: self._hotkey_edit.setKeySequence(QKeySequence(DEFAULT_HOTKEY)))
+        hotkey_row.addWidget(hotkey_reset_btn)
+        box_layout.addLayout(hotkey_row)
 
         return box
 

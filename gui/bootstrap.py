@@ -27,7 +27,7 @@ import core
 from .i18n import tr
 
 _REQUIRED_MODULES = ("torch", "faster_whisper", "pyannote.audio")
-_RECORDING_MODULES = ("sounddevice", "soundcard", "scipy")
+_RECORDING_MODULES = ("sounddevice", "soundcard", "scipy", "comtypes")
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 # Matches pip's "Downloading ...whl (12.6 MB)" or "Using cached ...whl

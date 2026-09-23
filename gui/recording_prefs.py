@@ -11,7 +11,10 @@ _USE_SYSTEM_KEY = "recording_use_system"
 _MIC_DEVICE_KEY = "recording_mic_device"
 _LOOPBACK_DEVICE_KEY = "recording_loopback_device"
 _EXCLUSIVE_KEY = "recording_exclusive"
+_HOTKEY_KEY = "recording_hotkey"
 _DEVICE_PREF_MIGRATED_KEY = "recording_device_pref_migrated_v1"
+
+DEFAULT_HOTKEY = "Alt+Backspace"
 
 
 def _migrate_device_prefs_once() -> None:
@@ -84,3 +87,13 @@ def get_exclusive_default() -> bool:
 
 def set_exclusive_default(value: bool) -> None:
     QSettings("MeetingScribe", "MeetingScribe").setValue(_EXCLUSIVE_KEY, value)
+
+
+def get_hotkey() -> str:
+    """The same key sequence both starts and stops a recording (see
+    gui/global_hotkey.py) - one binding to remember, not two."""
+    return QSettings("MeetingScribe", "MeetingScribe").value(_HOTKEY_KEY, DEFAULT_HOTKEY, type=str)
+
+
+def set_hotkey(value: str) -> None:
+    QSettings("MeetingScribe", "MeetingScribe").setValue(_HOTKEY_KEY, value)

@@ -19,6 +19,12 @@ sounddevice>=0.4.6
 soundcard>=0.4.3
 scipy>=1.10.0
 
+# Recording-in-progress taskbar badge: Qt6 dropped QtWinExtras, which used
+# to wrap Windows' ITaskbarList3::SetOverlayIcon - comtypes is the plain,
+# pure-Python way left to call that COM API directly (confirmed by direct
+# testing).
+comtypes>=1.2.0
+
 # pyannote deps
 omegaconf>=2.3.0
 huggingface_hub>=0.20.0
