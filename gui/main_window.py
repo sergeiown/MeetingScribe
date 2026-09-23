@@ -13,7 +13,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem,
-    QPushButton, QComboBox, QCheckBox, QLabel, QProgressBar, QTextEdit, QSlider,
+    QPushButton, QComboBox, QCheckBox, QLabel, QProgressBar, QTextEdit,
     QFileDialog, QMessageBox, QSpinBox, QToolTip, QToolButton, QMenu,
 )
 
@@ -32,7 +32,7 @@ from .settings_dialog import SettingsDialog
 from .style import get_prevent_sleep_preference
 from .dialogs import SpeakerNameDialog
 from .update_dialog import UpdateDownloadDialog
-from .widgets import LevelMeterWidget
+from .widgets import LevelMeterWidget, SeekSlider
 from .workers import TranscriptionWorker, DiarizationWorker, UpdateCheckWorker
 
 _PREFERRED_WIDTH = 1340
@@ -540,7 +540,7 @@ class MainWindow(QMainWindow):
         playback_row.setContentsMargins(0, 0, 0, 0)
         self._playback_time_label = QLabel("0:00 / 0:00")
         self._playback_time_label.setProperty("hint", True)
-        self._playback_slider = QSlider(Qt.Horizontal)
+        self._playback_slider = SeekSlider(Qt.Horizontal)
         self._playback_slider.sliderMoved.connect(self._on_playback_slider_moved)
         playback_row.addWidget(self._playback_time_label)
         playback_row.addWidget(self._playback_slider, stretch=1)
@@ -1084,15 +1084,23 @@ class MainWindow(QMainWindow):
             self._play_file(files[0])
 
     def _on_play_clicked(self):
+        files = self._selected_files()
+        if len(files) != 1:
+            return
+        path = files[0]
+        # A different file is now selected than whatever is loaded (or
+        # nothing is loaded yet) - switch to it regardless of the current
+        # playback state, rather than just pausing/resuming the old file
+        # underneath the new selection (confirmed: that's exactly what
+        # happened before - selecting another file and pressing Play just
+        # toggled the file already playing).
+        if self._media_player.source() != QUrl.fromLocalFile(str(path)):
+            self._play_file(path)
+            return
         if self._media_player.playbackState() == QMediaPlayer.PlayingState:
             self._media_player.pause()
-            return
-        if self._media_player.playbackState() == QMediaPlayer.PausedState:
+        else:
             self._media_player.play()
-            return
-        files = self._selected_files()
-        if len(files) == 1:
-            self._play_file(files[0])
 
     def _play_file(self, path: Path):
         self._media_player.setSource(QUrl.fromLocalFile(str(path)))

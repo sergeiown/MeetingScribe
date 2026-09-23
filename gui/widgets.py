@@ -7,7 +7,10 @@ import core
 
 from PySide6.QtCore import Signal, Qt, QRectF, QPointF
 from PySide6.QtGui import QColor, QPainter, QLinearGradient, QBrush, QPen, QPainterPath
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QProgressBar, QSizePolicy, QWidget
+from PySide6.QtWidgets import (
+    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QProgressBar, QSizePolicy,
+    QSlider, QStyle, QStyleOptionSlider, QWidget,
+)
 
 from .i18n import tr
 from .style import current_colors
@@ -26,6 +29,32 @@ def fit_action_button_width(button: QPushButton) -> None:
         widths.append(button.sizeHint().width())
     button.setText(original)
     button.setFixedWidth(max(widths))
+
+
+class SeekSlider(QSlider):
+    """A horizontal slider that jumps straight to the clicked position.
+
+    Qt's default QSlider does a page-step on a track click and only seeks
+    while actively dragging the handle (sliderMoved) - that reads as "seeking
+    doesn't work" to anyone expecting normal media-player click-to-seek."""
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            opt = QStyleOptionSlider()
+            self.initStyleOption(opt)
+            groove = self.style().subControlRect(
+                QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, self)
+            handle = self.style().subControlRect(
+                QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, self)
+            pos = event.position().toPoint().x() - handle.width() // 2
+            span = groove.width() - handle.width()
+            value = QStyle.sliderValueFromPosition(
+                self.minimum(), self.maximum(), max(0, min(pos, span)), span)
+            self.setValue(value)
+            self.sliderMoved.emit(value)
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
 
 class _ElidedLabel(QLabel):
