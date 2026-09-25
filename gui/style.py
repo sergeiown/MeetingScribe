@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication
 _THEME_KEY = "theme"  # "auto" | "light" | "dark", stored via QSettings
 _SPLASH_KEY = "show_splash"
 _PREVENT_SLEEP_KEY = "prevent_sleep"
+_MINIMIZE_TO_TRAY_KEY = "minimize_to_tray"
 _CHECK_ICON = str((Path(__file__).parent / "assets" / "check.svg").resolve()).replace("\\", "/")
 
 
@@ -35,6 +36,17 @@ def get_prevent_sleep_preference() -> bool:
 
 def set_prevent_sleep_preference(value: bool) -> None:
     QSettings("MeetingScribe", "MeetingScribe").setValue(_PREVENT_SLEEP_KEY, value)
+
+
+def get_minimize_to_tray_preference() -> bool:
+    # Off by default - opt-in, since it changes what minimizing/the X button
+    # do (hide instead of taskbar-minimize/quit), which existing users don't
+    # expect until they turn it on themselves.
+    return QSettings("MeetingScribe", "MeetingScribe").value(_MINIMIZE_TO_TRAY_KEY, False, type=bool)
+
+
+def set_minimize_to_tray_preference(value: bool) -> None:
+    QSettings("MeetingScribe", "MeetingScribe").setValue(_MINIMIZE_TO_TRAY_KEY, value)
 
 
 def _system_is_dark() -> bool:

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import core
 
-from PySide6.QtCore import Qt, QSettings, QThread, QTimer, QUrl, QFileSystemWatcher
+from PySide6.QtCore import Qt, QEvent, QSettings, QThread, QTimer, QUrl, QFileSystemWatcher
 from PySide6.QtGui import QDesktopServices, QTextCursor, QColor, QFont, QFontMetrics
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import (
@@ -29,8 +29,9 @@ from .recording_prefs import (
 )
 from .recording_worker import RecordingController
 from .taskbar_overlay import TaskbarOverlay
+from .tray_icon import TrayIconManager
 from .settings_dialog import SettingsDialog
-from .style import get_prevent_sleep_preference
+from .style import get_prevent_sleep_preference, get_minimize_to_tray_preference
 from .dialogs import SpeakerNameDialog
 from .update_dialog import UpdateDownloadDialog
 from .widgets import LevelMeterWidget, SeekSlider
@@ -94,6 +95,7 @@ class MainWindow(QMainWindow):
         self._progress_phase_start = None
         self._current_file_index = 0
         self._diarize_models_missing_notified = False
+        self._quitting = False
 
         self._recording_controller = None
         self._recording_devices = []
@@ -125,6 +127,14 @@ class MainWindow(QMainWindow):
         self._hotkey_manager = GlobalHotkeyManager()
         self._register_hotkey()
         self._power_event_manager = PowerEventManager(self._on_system_suspending)
+
+        self._tray_icon = None
+        if TrayIconManager.is_available():
+            icon_path = core.SCRIPT_DIR / "img" / "icon.ico"
+            self._tray_icon = TrayIconManager(icon_path, self)
+            self._tray_icon.restore_requested.connect(self._restore_from_tray)
+            self._tray_icon.quit_requested.connect(self._request_quit)
+        self._apply_minimize_to_tray_preference()
 
         # Created once, reused across files - independent of the recording
         # subsystem above (sounddevice/soundcard); playback is 100% QtMultimedia.
@@ -221,7 +231,7 @@ class MainWindow(QMainWindow):
         self._exit_btn = QToolButton()
         self._exit_btn.setText(tr("Exit"))
         self._exit_btn.setAutoRaise(True)
-        self._exit_btn.clicked.connect(self.close)
+        self._exit_btn.clicked.connect(self._request_quit)
         row.addWidget(self._exit_btn)
 
         row.addStretch()
@@ -454,7 +464,7 @@ class MainWindow(QMainWindow):
         self._set_active_record_row_visible(True)
         self._mic_checkbox.setEnabled(False)
         self._system_checkbox.setEnabled(False)
-        self._taskbar_overlay.set_recording(True)
+        self._set_recording_indicators(True)
         # Recording and playback both want the same audio devices - keep
         # playback fully stopped (not just paused) for the whole recording,
         # not just re-disabled, so it can't be silently resumed from code.
@@ -484,6 +494,11 @@ class MainWindow(QMainWindow):
         if self._recording_controller is not None:
             self._stop_recording()
 
+    def _set_recording_indicators(self, active: bool) -> None:
+        self._taskbar_overlay.set_recording(active)
+        if self._tray_icon is not None:
+            self._tray_icon.set_recording(active)
+
     def _on_recording_levels(self, levels):
         # Order matches _start_recording's devices list: mic first, then system.
         meters = []
@@ -507,7 +522,7 @@ class MainWindow(QMainWindow):
         self._set_active_record_row_visible(False)
         self._mic_checkbox.setEnabled(True)
         self._system_checkbox.setEnabled(True)
-        self._taskbar_overlay.set_recording(False)
+        self._set_recording_indicators(False)
         self._refresh_file_list(select_all=False)
         self._select_file_by_path(Path(path_str))
         self._refresh_play_button()
@@ -739,6 +754,8 @@ class MainWindow(QMainWindow):
         self._help_btn.setText(tr("Help"))
         self._how_to_use_action.setText(tr("How to use"))
         self._check_updates_action.setText(tr("Check for updates"))
+        if self._tray_icon is not None:
+            self._tray_icon.retranslate_ui()
         self._about_action.setText(tr("About"))
         self._exit_btn.setText(tr("Exit"))
 
@@ -985,6 +1002,7 @@ class MainWindow(QMainWindow):
             self._refresh_diarize_availability()
         self._update_active_device_labels()
         self._register_hotkey()
+        self._apply_minimize_to_tray_preference()
 
     def _show_about(self):
         QMessageBox.about(self, tr("About MeetingScribe"), tr(_ABOUT_TEXT, version=core.VERSION))
@@ -1440,6 +1458,15 @@ class MainWindow(QMainWindow):
         self._refresh_rename_button()
 
     def closeEvent(self, event):
+        # The X button behaves like minimize-to-tray too when that
+        # preference is on - nothing is actually being interrupted (a
+        # recording or transcription keeps running in the background), so
+        # this skips the confirmation prompts below entirely. Only a real
+        # quit (Exit button/menu, via _request_quit) falls through to them.
+        if not self._quitting and self._tray_icon is not None and self._tray_icon.is_visible():
+            event.ignore()
+            self.hide()
+            return
         if self._recording_controller is not None:
             ans = QMessageBox.question(
                 self, tr("Recording in progress"), tr("A recording is still running. Stop it and quit?"))
@@ -1454,4 +1481,40 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
             self._worker.terminate()
+        if self._tray_icon is not None:
+            self._tray_icon.hide()
         event.accept()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if (event.type() == QEvent.WindowStateChange and self.isMinimized()
+                and self._tray_icon is not None and self._tray_icon.is_visible()):
+            # Deferred rather than hiding immediately: doing it inline while
+            # Qt/Windows is still in the middle of processing the minimize
+            # itself was visibly glitchy in testing (a flash of the
+            # minimize animation before the window vanishes).
+            QTimer.singleShot(0, self.hide)
+
+    def _restore_from_tray(self):
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def _request_quit(self):
+        self._quitting = True
+        self.close()
+        # A real quit that the user backed out of at one of the
+        # confirmation prompts above (closeEvent ignored it) must not
+        # leave future minimize/X presses thinking a quit is still in
+        # progress.
+        self._quitting = False
+
+    def _apply_minimize_to_tray_preference(self):
+        if self._tray_icon is None:
+            return
+        if get_minimize_to_tray_preference():
+            self._tray_icon.show()
+        else:
+            self._tray_icon.hide()
+            if not self.isVisible():
+                self._restore_from_tray()

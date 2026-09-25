@@ -25,6 +25,7 @@ from .style import (
     apply_theme, get_theme_preference, set_theme_preference,
     get_show_splash_preference, set_show_splash_preference,
     get_prevent_sleep_preference, set_prevent_sleep_preference,
+    get_minimize_to_tray_preference, set_minimize_to_tray_preference,
 )
 from .widgets import ModelRowWidget, fit_action_button_width
 from .workers import ModelDownloadProcessWorker
@@ -446,6 +447,14 @@ class GeneralTab(QWidget):
         self._prevent_sleep_checkbox.setChecked(get_prevent_sleep_preference())
         self._prevent_sleep_checkbox.toggled.connect(set_prevent_sleep_preference)
         box_layout.addWidget(self._prevent_sleep_checkbox)
+
+        self._minimize_to_tray_checkbox = QCheckBox(tr("Minimize to the system tray"))
+        self._minimize_to_tray_checkbox.setToolTip(tr(
+            "Minimizing the window, or closing it with the X button, hides it to the "
+            "system tray instead - use the tray icon to bring it back or exit."))
+        self._minimize_to_tray_checkbox.setChecked(get_minimize_to_tray_preference())
+        self._minimize_to_tray_checkbox.toggled.connect(set_minimize_to_tray_preference)
+        box_layout.addWidget(self._minimize_to_tray_checkbox)
 
         return box
 

@@ -242,6 +242,11 @@ _UK = {
     "Interface": "Інтерфейс",
     "Show a splash screen on startup": "Показувати заставку при запуску",
     "Prevent the system from sleeping while running": "Не давати системі переходити в сон під час роботи",
+    "Minimize to the system tray": "Згортати в системний трей",
+    "Minimizing the window, or closing it with the X button, hides it to the "
+    "system tray instead - use the tray icon to bring it back or exit.":
+        "Згортання вікна або закриття кнопкою X ховає його в системний трей - "
+        "щоб повернути вікно або вийти, скористайся іконкою в треї.",
     "Recording": "Запис",
     "Microphone device:": "Пристрій мікрофона:",
     "System audio device:": "Пристрій системного звуку:",
