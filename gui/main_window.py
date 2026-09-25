@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from .device_prefs import get_device_preference
 from .global_hotkey import GlobalHotkeyManager
+from .power_events import PowerEventManager
 from .i18n import tr, get_language
 from .recording_prefs import (
     get_use_microphone, set_use_microphone,
@@ -123,6 +124,7 @@ class MainWindow(QMainWindow):
         self._taskbar_overlay = TaskbarOverlay(self)
         self._hotkey_manager = GlobalHotkeyManager()
         self._register_hotkey()
+        self._power_event_manager = PowerEventManager(self._on_system_suspending)
 
         # Created once, reused across files - independent of the recording
         # subsystem above (sounddevice/soundcard); playback is 100% QtMultimedia.
@@ -472,6 +474,15 @@ class MainWindow(QMainWindow):
         if self._recording_controller is None:
             return
         self._recording_controller.stop()
+
+    def _on_system_suspending(self):
+        """Windows is about to sleep (e.g. the laptop lid just closed) -
+        stop a recording cleanly right now, before the OS suspends the
+        audio hardware out from under it. See gui/power_events.py."""
+        if self._countdown_timer.isActive():
+            self._cancel_countdown()
+        if self._recording_controller is not None:
+            self._stop_recording()
 
     def _on_recording_levels(self, levels):
         # Order matches _start_recording's devices list: mic first, then system.
