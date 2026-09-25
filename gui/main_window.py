@@ -570,7 +570,7 @@ class MainWindow(QMainWindow):
         self._file_table.files_dropped.connect(self._on_files_dropped)
         files_layout.addWidget(self._file_table, stretch=1)
 
-        self._empty_hint = QLabel(tr("No files yet - click \"Add files...\" or drop some into input\\"))
+        self._empty_hint = QLabel(tr("No files yet - click \"Add files...\" or drag and drop them here"))
         self._empty_hint.setProperty("hint", True)
         self._empty_hint.setAlignment(Qt.AlignCenter)
         # Same stretch=1 as the table above - exactly one of the two is ever
@@ -765,7 +765,7 @@ class MainWindow(QMainWindow):
         self._files_box.setTitle(tr("Files"))
         self._file_table.setHorizontalHeaderLabels(
             [tr("File"), tr("Size"), tr("Duration"), tr("Status")])
-        self._empty_hint.setText(tr("No files yet - click \"Add files...\" or drop some into input\\"))
+        self._empty_hint.setText(tr("No files yet - click \"Add files...\" or drag and drop them here"))
         self._add_btn.setText(tr("Add files..."))
         self._rename_btn.setText(tr("Rename"))
         self._delete_btn.setText(tr("Delete selected"))

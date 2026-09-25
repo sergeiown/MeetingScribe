@@ -20,8 +20,8 @@ _UK = {
     "Size": "Розмір",
     "Duration": "Тривалість",
     "Status": "Статус",
-    "No files yet - click \"Add files...\" or drop some into input\\":
-        "Ще немає файлів - натисніть \"Додати файли...\" або киньте їх у теку input\\",
+    "No files yet - click \"Add files...\" or drag and drop them here":
+        "Ще немає файлів - натисніть \"Додати файли...\" або перетягніть їх сюди",
     "The transcript will appear here once processing starts...":
         "Розшифровка з'явиться тут після початку обробки...",
     "Add files...": "Додати файли...",
