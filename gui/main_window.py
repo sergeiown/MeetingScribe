@@ -34,7 +34,7 @@ from .settings_dialog import SettingsDialog
 from .style import get_prevent_sleep_preference, get_minimize_to_tray_preference
 from .dialogs import SpeakerNameDialog
 from .update_dialog import UpdateDownloadDialog
-from .widgets import LevelMeterWidget, SeekSlider
+from .widgets import LevelMeterWidget, SeekSlider, DropTableWidget
 from .workers import TranscriptionWorker, DiarizationWorker, UpdateCheckWorker
 
 _PREFERRED_WIDTH = 1340
@@ -549,7 +549,7 @@ class MainWindow(QMainWindow):
         self._files_box = QGroupBox(tr("Files"))
         files_layout = QVBoxLayout(self._files_box)
 
-        self._file_table = QTableWidget(0, 4)
+        self._file_table = DropTableWidget(0, 4)
         self._file_table.setHorizontalHeaderLabels(
             [tr("File"), tr("Size"), tr("Duration"), tr("Status")])
         self._file_table.verticalHeader().setVisible(False)
@@ -565,6 +565,7 @@ class MainWindow(QMainWindow):
         self._file_table.itemSelectionChanged.connect(self._refresh_play_button)
         self._file_table.itemSelectionChanged.connect(self._refresh_rename_button)
         self._file_table.itemDoubleClicked.connect(self._on_file_double_clicked)
+        self._file_table.files_dropped.connect(self._on_files_dropped)
         files_layout.addWidget(self._file_table, stretch=1)
 
         self._empty_hint = QLabel(tr("No files yet - click \"Add files...\" or drop some into input\\"))
@@ -974,11 +975,25 @@ class MainWindow(QMainWindow):
         paths, _ = QFileDialog.getOpenFileNames(
             self, tr("Add audio/video files"), str(core.INPUT_DIR),
             f"{tr('Media files')} (*.mp4 *.webm *.mkv *.mov *.avi *.m4a *.mp3 *.wav)")
+        self._add_files(paths)
+
+    def _on_files_dropped(self, paths):
+        self._add_files(paths)
+
+    def _add_files(self, paths):
+        """Shared by Add files... and dropping files onto the table -
+        copies anything not already in input/ there, silently skipping
+        directories and unsupported extensions rather than erroring, since
+        a drop can easily include either."""
+        added = False
         for p in paths:
             src = Path(p)
+            if not src.is_file() or src.suffix.lower() not in core.SUPPORTED_EXTENSIONS:
+                continue
             if src.parent != core.INPUT_DIR:
                 shutil.copy(str(src), str(core.INPUT_DIR / src.name))
-        if paths:
+            added = True
+        if added:
             self._refresh_file_list()
 
     def _on_open_output_folder(self):

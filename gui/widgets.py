@@ -9,7 +9,7 @@ from PySide6.QtCore import Signal, Qt, QRectF, QPointF
 from PySide6.QtGui import QColor, QPainter, QLinearGradient, QBrush, QPen, QPainterPath
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QProgressBar, QSizePolicy,
-    QSlider, QStyle, QStyleOptionSlider, QWidget,
+    QSlider, QStyle, QStyleOptionSlider, QTableWidget, QWidget,
 )
 
 from .i18n import tr
@@ -55,6 +55,44 @@ class SeekSlider(QSlider):
             event.accept()
             return
         super().mousePressEvent(event)
+
+
+class DropTableWidget(QTableWidget):
+    """A QTableWidget that also accepts dropped files (drag from Explorer,
+    or another app) as an alternative to browsing via a file dialog -
+    emits local paths as strings, existing or not, filtering is the
+    receiver's job."""
+
+    files_dropped = Signal(list)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAcceptDrops(True)
+
+    def _local_file_paths(self, mime_data):
+        if not mime_data.hasUrls():
+            return []
+        return [url.toLocalFile() for url in mime_data.urls() if url.isLocalFile()]
+
+    def dragEnterEvent(self, event):
+        if self._local_file_paths(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if self._local_file_paths(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        paths = self._local_file_paths(event.mimeData())
+        if paths:
+            event.acceptProposedAction()
+            self.files_dropped.emit(paths)
+        else:
+            super().dropEvent(event)
 
 
 class _ElidedLabel(QLabel):
