@@ -1501,6 +1501,14 @@ class MainWindow(QMainWindow):
         if self._tray_icon is not None:
             self._tray_icon.hide()
         event.accept()
+        # quitOnLastWindowClosed alone turned out not to reliably fire here
+        # (confirmed live: leftover invisible top-level widgets Qt creates
+        # internally - a QComboBox popup container, the tray icon's own
+        # QMenu - are still "open" as far as that mechanism is concerned,
+        # even though none of them are actually visible or matter) - explicit
+        # and unconditional, since this line is only ever reached once a
+        # real quit has already been decided above.
+        QApplication.instance().quit()
 
     def changeEvent(self, event):
         super().changeEvent(event)
