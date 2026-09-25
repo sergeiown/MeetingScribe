@@ -39,10 +39,7 @@ def set_prevent_sleep_preference(value: bool) -> None:
 
 
 def get_minimize_to_tray_preference() -> bool:
-    # Off by default - opt-in, since it changes what minimizing/the X button
-    # do (hide instead of taskbar-minimize/quit), which existing users don't
-    # expect until they turn it on themselves.
-    return QSettings("MeetingScribe", "MeetingScribe").value(_MINIMIZE_TO_TRAY_KEY, False, type=bool)
+    return QSettings("MeetingScribe", "MeetingScribe").value(_MINIMIZE_TO_TRAY_KEY, True, type=bool)
 
 
 def set_minimize_to_tray_preference(value: bool) -> None:
