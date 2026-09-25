@@ -20,7 +20,14 @@ class SpeakerNameDialog(QDialog):
     def __init__(self, label, samples, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Unidentified speaker"))
-        self.setModal(True)
+        # Not modal - the user needs to be able to click back into the main
+        # window and use Play to listen to the file this speaker came from
+        # while deciding on a name, without this dialog blocking that input.
+        # exec() below still blocks the calling code (the worker thread's
+        # decide() call is waiting on it via a queued signal) regardless of
+        # modality - modality only ever controls whether OTHER windows can
+        # receive input while this one is open, not whether exec() blocks.
+        self.setModal(False)
         self._label = label
         self.choice = None
         self._existing_path = None

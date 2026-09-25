@@ -553,13 +553,17 @@ class MainWindow(QMainWindow):
 
         file_btn_row = QHBoxLayout()
         self._add_btn = QPushButton(tr("Add files..."))
+        self._add_btn.setProperty("compact", True)
         self._add_btn.clicked.connect(self._on_add_files)
         self._rename_btn = QPushButton(tr("Rename"))
+        self._rename_btn.setProperty("compact", True)
         self._rename_btn.clicked.connect(self._on_rename_file)
         self._rename_btn.setEnabled(False)
         self._delete_btn = QPushButton(tr("Delete selected"))
+        self._delete_btn.setProperty("compact", True)
         self._delete_btn.clicked.connect(self._on_delete_files)
         self._play_btn = QPushButton(tr("Play"))
+        self._play_btn.setProperty("compact", True)
         self._play_btn.clicked.connect(self._on_play_clicked)
         self._play_btn.setEnabled(False)
         file_btn_row.addWidget(self._add_btn)
@@ -598,6 +602,19 @@ class MainWindow(QMainWindow):
         self._transcript_view.setPlaceholderText(
             tr("The transcript will appear here once processing starts..."))
         transcript_layout.addWidget(self._transcript_view)
+
+        transcript_btn_row = QHBoxLayout()
+        self._clear_transcript_btn = QPushButton(tr("Clear"))
+        self._clear_transcript_btn.setProperty("compact", True)
+        self._clear_transcript_btn.clicked.connect(self._on_clear_transcript)
+        self._copy_transcript_btn = QPushButton(tr("Copy"))
+        self._copy_transcript_btn.setProperty("compact", True)
+        self._copy_transcript_btn.clicked.connect(self._on_copy_transcript)
+        transcript_btn_row.addWidget(self._clear_transcript_btn)
+        transcript_btn_row.addWidget(self._copy_transcript_btn)
+        transcript_btn_row.addStretch()
+        transcript_layout.addLayout(transcript_btn_row)
+
         col.addWidget(self._transcript_box, stretch=1)
 
         return col
@@ -726,6 +743,8 @@ class MainWindow(QMainWindow):
         self._transcript_box.setTitle(tr("Transcript"))
         self._transcript_view.setPlaceholderText(
             tr("The transcript will appear here once processing starts..."))
+        self._clear_transcript_btn.setText(tr("Clear"))
+        self._copy_transcript_btn.setText(tr("Copy"))
 
         self._options_box.setTitle(tr("Options"))
         self._model_label.setText(tr("Model:"))
@@ -1374,6 +1393,12 @@ class MainWindow(QMainWindow):
         cursor.movePosition(QTextCursor.End, QTextCursor.KeepAnchor)
         cursor.removeSelectedText()
         cursor.insertText(text)
+
+    def _on_clear_transcript(self):
+        self._transcript_view.clear()
+
+    def _on_copy_transcript(self):
+        QApplication.clipboard().setText(self._transcript_view.toPlainText())
 
     def _on_file_failed(self, name, message):
         self._overall_progress_bar.setValue(self._current_file_index)

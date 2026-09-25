@@ -159,6 +159,15 @@ QPushButton:hover {{ background: {c['btn_hover']}; }}
 QPushButton:pressed {{ background: {c['btn_pressed']}; }}
 QPushButton:disabled {{ color: {c['btn_disabled_text']}; background: {c['btn_disabled_bg']}; border-color: {c['border']}; }}
 
+/* Secondary, everyday actions (file list / transcript toolbars) - smaller
+   than the default so they don't compete visually with the big primary
+   action buttons (Record, Recognize speech, ...), which deliberately keep
+   the roomier default padding above. */
+QPushButton[compact="true"] {{
+    padding: 3px 10px;
+    font-weight: 400;
+}}
+
 QPushButton#primaryButton {{
     background: {c['accent']};
     border: 1px solid {c['accent_border']};
