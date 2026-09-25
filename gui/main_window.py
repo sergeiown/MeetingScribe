@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from .device_prefs import get_device_preference
 from .global_hotkey import GlobalHotkeyManager
 from .power_events import PowerEventManager
+from .single_instance import ShowWindowListener
 from .i18n import tr, get_language
 from .recording_prefs import (
     get_use_microphone, set_use_microphone,
@@ -127,6 +128,7 @@ class MainWindow(QMainWindow):
         self._hotkey_manager = GlobalHotkeyManager()
         self._register_hotkey()
         self._power_event_manager = PowerEventManager(self._on_system_suspending)
+        self._show_window_listener = ShowWindowListener(self._restore_from_tray)
 
         self._tray_icon = None
         if TrayIconManager.is_available():
