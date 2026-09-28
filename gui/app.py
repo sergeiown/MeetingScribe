@@ -133,6 +133,25 @@ def main():
         model_spec=model_to_bundle, hf_token=core.read_hf_token())
     if not ok:
         sys.exit(1)
+
+    # numpy/scipy.signal are deliberately imported lazily inside
+    # core/recording.py (see its module docstring) so a fresh install's
+    # bare-PySide6 venv can get through `import core` at all, before these
+    # are even installed - but that means the actual import cost (module
+    # init, loading their native extensions) lands on whichever recording
+    # happens to be stopped first, which showed up as a real, confirmed
+    # "first save after launching the app is slow, every one after that is
+    # fast" report. Pre-warming them here, now that ensure_dependencies()
+    # above guarantees they're actually installed, moves that one-time cost
+    # to app startup instead of the middle of the user's first recording.
+    def _prewarm_recording_deps():
+        try:
+            import numpy  # noqa: F401
+            from scipy.signal import resample_poly  # noqa: F401
+        except Exception:
+            pass
+    threading.Thread(target=_prewarm_recording_deps, daemon=True).start()
+
     if model_error:
         QMessageBox.warning(
             None, tr("Download failed"),

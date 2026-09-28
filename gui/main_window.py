@@ -485,6 +485,15 @@ class MainWindow(QMainWindow):
     def _stop_recording(self):
         if self._recording_controller is None:
             return
+        # Recorder.stop() runs the mix/resample/write-WAV work synchronously
+        # on this (GUI) thread, so the app is briefly unresponsive right
+        # here - without this, the elapsed-time label just sat frozen at
+        # its last value the whole time, with no indication that anything
+        # was happening at all.
+        self._stop_btn.setEnabled(False)
+        self._pause_btn.setEnabled(False)
+        self._record_elapsed_label.setText(tr("Saving..."))
+        QApplication.processEvents()
         self._recording_controller.stop()
 
     def _on_system_suspending(self):
@@ -522,6 +531,8 @@ class MainWindow(QMainWindow):
         self._system_meter.reset()
         self._record_elapsed_label.setText("00:00")
         self._set_active_record_row_visible(False)
+        self._stop_btn.setEnabled(True)
+        self._pause_btn.setEnabled(True)
         self._mic_checkbox.setEnabled(True)
         self._system_checkbox.setEnabled(True)
         self._set_recording_indicators(False)
