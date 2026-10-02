@@ -37,6 +37,13 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}/releases
+; File properties of Setup.exe itself (Details tab) - Inno defaults these to
+; 0.0.0.0 / empty unless set explicitly.
+VersionInfoVersion={#MyAppVersion}.0
+VersionInfoProductVersion={#MyAppVersion}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoProductName={#MyAppName}
+VersionInfoDescription={#MyAppName} Setup
 DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
