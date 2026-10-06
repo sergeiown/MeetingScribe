@@ -214,7 +214,7 @@ def _distance_to_turns(seg_start, seg_end, label_turns) -> float:
     return best
 
 
-def collect_speaker_samples(segments, turns, unknown_labels, max_samples: int = 3) -> dict:
+def collect_speaker_samples(segments, turns, unknown_labels, max_samples: int = 5) -> dict:
     """{label: [(start_time, text), ...]} - up to max_samples per label.
 
     A label can end up with no overlapping segment at all (e.g. a brief

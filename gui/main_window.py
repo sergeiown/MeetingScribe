@@ -1417,7 +1417,7 @@ class MainWindow(QMainWindow):
             self._transcript_view.append(label)
 
     def _on_speaker_decision_needed(self, req):
-        dlg = SpeakerNameDialog(req.label, req.samples, self)
+        dlg = SpeakerNameDialog(req.label, req.samples)
         dlg.exec()
         req.fulfill(dlg.choice)
 

@@ -2,6 +2,7 @@
 
 import core
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QRadioButton, QButtonGroup, QDialogButtonBox, QTextEdit,
@@ -17,9 +18,19 @@ class SpeakerNameDialog(QDialog):
     replaces it with their own; Save is the only way out. Sets .choice to a
     core.SpeakerNameChoice before closing."""
 
-    def __init__(self, label, samples, parent=None):
-        super().__init__(parent)
+    def __init__(self, label, samples):
+        # Deliberately parentless: a dialog owned by the main window always
+        # stays on top of it on Windows and can't be minimized separately,
+        # which covered the file list and the Play controls the user needs
+        # to listen to the audio this speaker came from. As its own
+        # top-level window it gets a taskbar button and a minimize button,
+        # and clicking the main window brings that one to the front.
+        super().__init__(None)
+        self.setWindowFlags(
+            Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint
+            | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint)
         self.setWindowTitle(tr("Unidentified speaker"))
+        self.setMinimumWidth(480)
         # Not modal - the user needs to be able to click back into the main
         # window and use Play to listen to the file this speaker came from
         # while deciding on a name, without this dialog blocking that input.
@@ -38,7 +49,7 @@ class SpeakerNameDialog(QDialog):
 
         samples_text = QTextEdit()
         samples_text.setReadOnly(True)
-        samples_text.setMaximumHeight(120)
+        samples_text.setMaximumHeight(180)
         if samples:
             lines = [f'{core.format_time(ts)}  "{txt[:80]}"' for ts, txt in samples]
         else:
