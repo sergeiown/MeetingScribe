@@ -221,6 +221,8 @@ _UK = {
     "Could not read the import file:\n\n{error}": "Не вдалося прочитати файл імпорту:\n\n{error}",
     "Select a speaker to rename.": "Виберіть спікера для перейменування.",
     "Rename speaker": "Перейменування спікера",
+    'A speaker named "{name}" already exists. Add the voiceprint(s) of "{old}" to it as new version(s)?':
+        'Спікер "{name}" вже існує. Додати голосовий відбиток (відбитки) "{old}" до нього як нову версію (версії)?',
     "New name:": "Нове ім'я:",
     "Select a version to delete.": "Виберіть версію для видалення.",
     "Delete {name}?": "Видалити {name}?",

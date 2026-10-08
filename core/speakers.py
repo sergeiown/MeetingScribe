@@ -391,18 +391,47 @@ def delete_speaker_person(base_name: str, speakers_dir: Path = SPEAKERS_DIR) -> 
     return count
 
 
+def existing_speaker_base(name: str, speakers_dir: Path = SPEAKERS_DIR) -> Optional[str]:
+    """The stored spelling of an already-enrolled person matching `name`
+    (case-insensitive - Windows file names are, so 'ivan' and 'Ivan' can't
+    coexist as separate people), or None."""
+    target = base_speaker_name(name).casefold()
+    if speakers_dir.exists():
+        for f in speakers_dir.glob("*.npy"):
+            base = base_speaker_name(f.stem)
+            if base.casefold() == target:
+                return base
+    return None
+
+
+def _file_version(f: Path) -> int:
+    m = _SPK_VER_RE.search(f.stem)
+    return int(m.group(1)) if m else 1
+
+
 def rename_speaker_person(old_base: str, new_base: str, speakers_dir: Path = SPEAKERS_DIR) -> int:
     """Rename every version file's base name, preserving each file's own
     (vN) suffix, e.g. 'Old Name (v2).npy' -> 'New Name (v2).npy'. Returns
-    the count renamed."""
-    count = 0
-    for f in speakers_dir.glob("*.npy"):
-        if base_speaker_name(f.stem) == old_base:
+    the count renamed.
+
+    If `new_base` is already an enrolled person (a different one - a pure
+    change of letter case doesn't count), their versions would collide with
+    ours, so instead each of ours is added as a NEW version of that person,
+    numbered after their highest existing one, in our original version
+    order."""
+    sources = sorted(
+        (f for f in speakers_dir.glob("*.npy") if base_speaker_name(f.stem) == old_base),
+        key=_file_version)
+    existing = existing_speaker_base(new_base, speakers_dir)
+    merging = existing is not None and existing.casefold() != old_base.casefold()
+    for f in sources:
+        if merging:
+            target = speakers_dir / f"{next_versioned_name(existing, speakers_dir)}.npy"
+        else:
             m = _SPK_VER_RE.search(f.stem)
-            suffix = m.group(0) if m else ""
-            f.rename(speakers_dir / f"{new_base}{suffix}.npy")
-            count += 1
-    return count
+            target = speakers_dir / f"{new_base}{m.group(0) if m else ''}.npy"
+        f.rename(target)
+    return len(sources)
 
 
 def export_speakers(paths: Optional[list] = None, dest_zip: Path = None) -> int:

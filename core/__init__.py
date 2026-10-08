@@ -39,7 +39,7 @@ from .speakers import (
     collect_speaker_samples, SpeakerNameChoice, NamingDecisionFn,
     resolve_unknown_speakers, enroll_speaker, EnrollResult,
     SpeakerVersion, SpeakerPerson, list_speaker_persons,
-    delete_speaker_version, delete_speaker_person, rename_speaker_person,
+    delete_speaker_version, delete_speaker_person, rename_speaker_person, existing_speaker_base,
     export_speakers, import_speakers,
 )
 from .models_catalog import (
@@ -78,7 +78,7 @@ __all__ = [
     "collect_speaker_samples", "SpeakerNameChoice", "NamingDecisionFn",
     "resolve_unknown_speakers", "enroll_speaker", "EnrollResult",
     "SpeakerVersion", "SpeakerPerson", "list_speaker_persons",
-    "delete_speaker_version", "delete_speaker_person", "rename_speaker_person",
+    "delete_speaker_version", "delete_speaker_person", "rename_speaker_person", "existing_speaker_base",
     "export_speakers", "import_speakers",
     "ModelSpec", "WHISPER_MODELS", "PYANNOTE_MODELS",
     "DIARIZATION_BUNDLE_LABEL", "DIARIZATION_BUNDLE_SIZE", "DIARIZATION_BUNDLE_DESCRIPTION",

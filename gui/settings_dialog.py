@@ -280,7 +280,18 @@ class SpeakersTab(QWidget):
         new_name, ok = QInputDialog.getText(self, tr("Rename speaker"), tr("New name:"), text=base_name)
         new_name = core.base_speaker_name(new_name.strip()) if ok else ""
         if ok and new_name and new_name != base_name:
-            core.rename_speaker_person(base_name, new_name)
+            existing = core.existing_speaker_base(new_name)
+            if existing is not None and existing.casefold() != base_name.casefold():
+                answer = QMessageBox.question(
+                    self, tr("Rename speaker"),
+                    tr('A speaker named "{name}" already exists. Add the voiceprint(s) of "{old}" '
+                       'to it as new version(s)?', name=existing, old=base_name))
+                if answer != QMessageBox.Yes:
+                    return
+            try:
+                core.rename_speaker_person(base_name, new_name)
+            except OSError as e:
+                QMessageBox.warning(self, tr("Rename speaker"), str(e))
             self.refresh()
 
     def _on_delete_version(self):
