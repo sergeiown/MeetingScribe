@@ -132,7 +132,9 @@ _UK = {
     "Update": "Оновлення",
     "A transcription is still running. Finish or cancel it, then try installing the update again.":
         "Розшифровка ще триває. Завершіть або скасуйте її, потім спробуйте встановити оновлення знову.",
-    "Install update": "Встановлення оновлення",
+    "A recording is in progress. Stop it, then try installing the update again.":
+        "Триває запис. Зупиніть його, потім спробуйте встановити оновлення знову.",
+    "Install update":"Встановлення оновлення",
     "Install version {version} now? MeetingScribe will close and reopen.\n\n"
     "Windows may show a security prompt for the installer since it isn't "
     "code-signed - that's expected.":

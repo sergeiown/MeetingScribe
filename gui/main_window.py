@@ -1143,6 +1143,10 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, tr("Update"), tr(
                 "A transcription is still running. Finish or cancel it, then try installing the update again."))
             return
+        if self._recording_controller is not None:
+            QMessageBox.information(self, tr("Update"), tr(
+                "A recording is in progress. Stop it, then try installing the update again."))
+            return
         ans = QMessageBox.question(self, tr("Install update"), tr(
             "Install version {version} now? MeetingScribe will close and reopen.\n\n"
             "Windows may show a security prompt for the installer since it isn't "
@@ -1156,7 +1160,10 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, tr("Update failed"),
                                  tr("Could not start the installer: {error}", error=str(e)))
             return
-        self.close()
+        # A real quit, not close(): with minimize-to-tray on, close() only
+        # hides the window and the old process would keep running its old
+        # code after the installer replaces the files underneath it.
+        self._request_quit()
 
     def _selected_rows(self):
         return sorted({idx.row() for idx in self._file_table.selectedIndexes()})

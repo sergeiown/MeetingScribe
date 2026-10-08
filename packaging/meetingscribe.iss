@@ -116,9 +116,31 @@ const
 procedure SHChangeNotify(wEventId: Longint; uFlags: Longint; dwItem1, dwItem2: Longint);
   external 'SHChangeNotify@shell32.dll stdcall';
 
+// Ends a still-running MeetingScribe (typically minimized to the tray, where
+// closing the window doesn't quit it) before files are replaced or removed -
+// otherwise the old process keeps running its old code after an update, and
+// holds the venv's interpreter open so an uninstall can't delete it. Only
+// processes launched from this install's own venv are touched.
+procedure StopRunningApp();
+var
+  ResultCode: Integer;
+begin
+  Exec('powershell.exe',
+    '-NoProfile -WindowStyle Hidden -Command "Get-Process pythonw,python -ErrorAction SilentlyContinue | ' +
+    'Where-Object { $_.Path -like ''' + ExpandConstant('{app}') + '\venv\*'' } | Stop-Process -Force"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  StopRunningApp();
+  Result := '';
+end;
+
 function InitializeUninstall(): Boolean;
 begin
   Result := True;
+  StopRunningApp();
   // A silent uninstall must not wipe user data without asking - default to
   // keeping it (only the venv is removed regardless). Interactive always asks.
   if UninstallSilent() then
