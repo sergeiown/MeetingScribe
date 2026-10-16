@@ -146,6 +146,7 @@ class MainWindow(QMainWindow):
         self._media_player.positionChanged.connect(self._on_playback_position_changed)
         self._media_player.durationChanged.connect(self._on_playback_duration_changed)
         self._media_player.playbackStateChanged.connect(self._on_playback_state_changed)
+        self._media_player.sourceChanged.connect(lambda _url: self._refresh_playback_slider())
 
         self._build_ui()
         self._apply_initial_geometry()
@@ -625,6 +626,7 @@ class MainWindow(QMainWindow):
         self._playback_time_label = QLabel("0:00 / 0:00")
         self._playback_time_label.setProperty("hint", True)
         self._playback_slider = SeekSlider(Qt.Horizontal)
+        self._playback_slider.setEnabled(False)
         self._playback_slider.sliderMoved.connect(self._on_playback_slider_moved)
         playback_row.addWidget(self._playback_time_label)
         playback_row.addWidget(self._playback_slider, stretch=1)
@@ -1226,10 +1228,21 @@ class MainWindow(QMainWindow):
     # --- playback ------------------------------------------------------
 
     def _refresh_play_button(self):
+        self._refresh_playback_slider()
         if self._recording_controller is not None:
             self._play_btn.setEnabled(False)
             return
         self._play_btn.setEnabled(len(self._selected_files()) == 1)
+
+    def _refresh_playback_slider(self):
+        """Seeking only means something for one concrete selected file that
+        the player actually has loaded - not with nothing selected, several
+        files selected, a recording in progress, or a selected file that
+        hasn't been started yet."""
+        files = self._selected_files()
+        self._playback_slider.setEnabled(
+            self._recording_controller is None and len(files) == 1
+            and self._media_player.source() == QUrl.fromLocalFile(str(files[0])))
 
     def _on_file_double_clicked(self, _item):
         if self._recording_controller is not None:
