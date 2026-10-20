@@ -215,7 +215,7 @@ def _distance_to_turns(seg_start, seg_end, label_turns) -> float:
 
 
 def collect_speaker_samples(segments, turns, unknown_labels, max_samples: int = 5) -> dict:
-    """{label: [(start_time, text), ...]} - up to max_samples per label.
+    """{label: [(start_time, end_time, text), ...]} - up to max_samples per label.
 
     A label can end up with no overlapping segment at all (e.g. a brief
     interjection whisper folded into a neighboring speaker's segment instead
@@ -228,7 +228,7 @@ def collect_speaker_samples(segments, turns, unknown_labels, max_samples: int = 
     for start, end, txt in texted:
         spk = assign_speaker(start, end, turns)
         if spk in samples and len(samples[spk]) < max_samples:
-            samples[spk].append((start, txt))
+            samples[spk].append((start, end, txt))
 
     if not texted:
         return samples
@@ -240,7 +240,7 @@ def collect_speaker_samples(segments, turns, unknown_labels, max_samples: int = 
         if not label_turns:
             continue
         nearest = min(texted, key=lambda seg: _distance_to_turns(seg[0], seg[1], label_turns))
-        samples[label].append((nearest[0], nearest[2]))
+        samples[label].append((nearest[0], nearest[1], nearest[2]))
     return samples
 
 
@@ -252,7 +252,8 @@ class SpeakerNameChoice:
     target_path: Optional[Path] = None  # set only when action == "overwrite"
 
 
-NamingDecisionFn = Callable[[str, list], "SpeakerNameChoice"]
+# (label, samples, position, total): position is 1-based among this file's unnamed speakers.
+NamingDecisionFn = Callable[[str, list, int, int], "SpeakerNameChoice"]
 
 
 @dataclass
@@ -315,10 +316,10 @@ def resolve_unknown_speakers(segments, turns, spk_names: dict, audio_np, sr, hf_
     updated = dict(spk_names)
     to_enroll = {}
 
-    for label in unknown:
+    for position, label in enumerate(unknown, 1):
         if cancel_token:
             cancel_token.check()
-        choice = decide(label, samples[label])
+        choice = decide(label, samples[label], position, len(unknown))
         if choice.action == "skip" or not choice.name:
             continue
         updated[label] = choice.name

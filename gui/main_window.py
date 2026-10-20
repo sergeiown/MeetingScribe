@@ -97,6 +97,7 @@ class MainWindow(QMainWindow):
         self._current_file_index = 0
         self._diarize_models_missing_notified = False
         self._quitting = False
+        self._current_file_path = None
 
         self._recording_controller = None
         self._recording_devices = []
@@ -1437,12 +1438,15 @@ class MainWindow(QMainWindow):
             self._transcript_view.append(label)
 
     def _on_speaker_decision_needed(self, req):
-        dlg = SpeakerNameDialog(req.label, req.samples)
+        dlg = SpeakerNameDialog(
+            req.label, req.samples, index=req.index, total=req.total,
+            audio_path=self._current_file_path, on_before_play=self._media_player.pause)
         dlg.exec()
         req.fulfill(dlg.choice)
 
     def _on_file_started(self, name, index, total):
         self._current_file_index = index
+        self._current_file_path = core.INPUT_DIR / name
         self._progress_phase = None  # force a fresh ETA clock for this file
         self._overall_progress_bar.setValue(index - 1)
         self._transcript_view.append(f"\n=== [{index}/{total}] {name} ===")

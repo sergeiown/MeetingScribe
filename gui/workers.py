@@ -87,7 +87,7 @@ class _QueueProcessWorker(QObject):
             self.file_failed.emit(msg[1], msg[2])
         elif kind == "speaker_decision_needed":
             from .decision_request import SpeakerDecisionRequest
-            self.speaker_decision_needed.emit(SpeakerDecisionRequest(msg[1], msg[2], self._decision_q))
+            self.speaker_decision_needed.emit(SpeakerDecisionRequest(msg[1], msg[2], self._decision_q, msg[3], msg[4]))
         elif kind == "finished":
             self._poll_timer.stop()
             self.finished.emit()

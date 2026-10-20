@@ -303,6 +303,11 @@ _UK = {
     # dialogs.py
     "Unidentified speaker": "Невизначений спікер",
     "(no text samples)": "(немає текстових зразків)",
+    "({index} of {total})": "({index} з {total})",
+    "Listen to excerpt": "Прослухати відривок",
+    "Listen to this excerpt ({time})?": "Прослухати цей відривок ({time})?",
+    "Click a line to listen to that part of the recording.":
+        "Клацніть на рядок, щоб прослухати цей фрагмент запису.",
     "Name (leave empty to skip):": "Ім'я (залиште порожнім, щоб пропустити):",
     '"{name}" already in database ({file}).': '"{name}" вже є в базі ({file}).',
     "Overwrite": "Перезаписати",

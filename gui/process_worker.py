@@ -58,9 +58,9 @@ def run_transcription_process(files, model_size, language, auto_diarize, hf_toke
         # label is an internal pyannote stage name, not transcript content.
         progress_q.put(("progress", "diarize", cur, total, label))
 
-    def decide(label, samples):
+    def decide(label, samples, index, total):
         req = SpeakerDecisionRequest(label, samples, decision_q)
-        progress_q.put(("speaker_decision_needed", label, samples))
+        progress_q.put(("speaker_decision_needed", label, samples, index, total))
         return decision_q.get()  # blocks this process only, until the GUI answers
 
     try:
@@ -128,9 +128,9 @@ def run_diarize_process(files, hf_token, num_speakers, device_preference, progre
     def on_diarize_progress(cur, total, label):
         progress_q.put(("progress", "diarize", cur, total, label))
 
-    def decide(label, samples):
+    def decide(label, samples, index, total):
         req = SpeakerDecisionRequest(label, samples, decision_q)
-        progress_q.put(("speaker_decision_needed", label, samples))
+        progress_q.put(("speaker_decision_needed", label, samples, index, total))
         return decision_q.get()
 
     try:

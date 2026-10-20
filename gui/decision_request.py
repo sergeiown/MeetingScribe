@@ -4,9 +4,11 @@ the worker process blocks on."""
 
 
 class SpeakerDecisionRequest:
-    def __init__(self, label, samples, decision_queue):
+    def __init__(self, label, samples, decision_queue, index=1, total=1):
         self.label = label
         self.samples = samples
+        self.index = index
+        self.total = total
         self._decision_queue = decision_queue
 
     def fulfill(self, choice):
