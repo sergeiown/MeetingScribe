@@ -350,7 +350,29 @@ class SpeakersTab(QWidget):
         if not src:
             return
         try:
-            count = core.import_speakers(Path(src))
+            conflicts = core.find_import_conflicts(Path(src))
+            on_conflict = "version"
+            if conflicts:
+                box = QMessageBox(self)
+                box.setIcon(QMessageBox.Question)
+                box.setWindowTitle(tr("Import speakers"))
+                box.setText(tr("{n} speaker(s) from the file already exist. Update them or skip?", n=len(conflicts)))
+                box.setInformativeText("
+".join(Path(c).stem for c in conflicts[:10])
+                                       + ("
+..." if len(conflicts) > 10 else ""))
+                update_btn = box.addButton(tr("Update existing"), QMessageBox.AcceptRole)
+                skip_btn = box.addButton(tr("Skip existing"), QMessageBox.DestructiveRole)
+                box.addButton(tr("Cancel"), QMessageBox.RejectRole)
+                box.exec()
+                clicked = box.clickedButton()
+                if clicked is update_btn:
+                    on_conflict = "overwrite"
+                elif clicked is skip_btn:
+                    on_conflict = "skip"
+                else:
+                    return
+            count = core.import_speakers(Path(src), on_conflict=on_conflict)
             self.refresh()
             QMessageBox.information(self, tr("Import speakers"), tr("Imported {n} voiceprint(s).", n=count))
         except Exception as e:

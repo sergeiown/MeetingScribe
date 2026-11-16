@@ -40,7 +40,7 @@ from .speakers import (
     resolve_unknown_speakers, enroll_speaker, EnrollResult,
     SpeakerVersion, SpeakerPerson, list_speaker_persons,
     delete_speaker_version, delete_speaker_person, rename_speaker_person, existing_speaker_base,
-    export_speakers, import_speakers,
+    export_speakers, import_speakers, find_import_conflicts,
 )
 from .models_catalog import (
     ModelSpec, WHISPER_MODELS, PYANNOTE_MODELS,
@@ -79,7 +79,7 @@ __all__ = [
     "resolve_unknown_speakers", "enroll_speaker", "EnrollResult",
     "SpeakerVersion", "SpeakerPerson", "list_speaker_persons",
     "delete_speaker_version", "delete_speaker_person", "rename_speaker_person", "existing_speaker_base",
-    "export_speakers", "import_speakers",
+    "export_speakers", "import_speakers", "find_import_conflicts",
     "ModelSpec", "WHISPER_MODELS", "PYANNOTE_MODELS",
     "DIARIZATION_BUNDLE_LABEL", "DIARIZATION_BUNDLE_SIZE", "DIARIZATION_BUNDLE_DESCRIPTION",
     "installed_whisper_sizes", "is_whisper_installed", "is_pyannote_installed", "is_diarization_complete",

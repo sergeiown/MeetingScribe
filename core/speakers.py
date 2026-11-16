@@ -450,34 +450,43 @@ def export_speakers(paths: Optional[list] = None, dest_zip: Path = None) -> int:
     return len(paths)
 
 
-def import_speakers(path: Path, speakers_dir: Path = SPEAKERS_DIR) -> int:
-    """Imports .npy voiceprints from either a single .npy file or a zip made
-    by export_speakers(). Never overwrites an existing file - a name
-    collision is saved as a new version instead, so import can't destroy an
-    enrollment."""
-    speakers_dir.mkdir(parents=True, exist_ok=True)
-    count = 0
-
-    def save_one(name: str, data: bytes) -> None:
-        nonlocal count
-        dest = speakers_dir / name
-        if dest.exists():
-            base = base_speaker_name(Path(name).stem)
-            dest = speakers_dir / f"{next_versioned_name(base, speakers_dir)}.npy"
-        dest.write_bytes(data)
-        count += 1
-
+def _import_entries(path: Path):
+    """[(file name, bytes)] from a single .npy or a zip made by export_speakers()."""
     if path.suffix.lower() == ".npy":
-        save_one(path.name, path.read_bytes())
-        return count
-
+        return [(path.name, path.read_bytes())]
     import zipfile
 
+    entries = []
     with zipfile.ZipFile(path, "r") as zf:
         for info in zf.infolist():
             name = Path(info.filename).name
-            if not name.lower().endswith(".npy") or info.is_dir():
+            if info.is_dir() or not name.lower().endswith(".npy"):
                 continue
-            with zf.open(info) as src:
-                save_one(name, src.read())
+            entries.append((name, zf.read(info)))
+    return entries
+
+
+def find_import_conflicts(path: Path, speakers_dir: Path = SPEAKERS_DIR) -> list:
+    """File names in the import that already exist in the speaker database."""
+    return [name for name, _ in _import_entries(path) if (speakers_dir / name).exists()]
+
+
+def import_speakers(path: Path, speakers_dir: Path = SPEAKERS_DIR, on_conflict: str = "version") -> int:
+    """Imports .npy voiceprints from either a single .npy file or a zip made
+    by export_speakers(). on_conflict decides what happens to a name that
+    already exists: "version" (default) saves it as a new version, so import
+    can't destroy an enrollment; "overwrite" replaces the existing file;
+    "skip" leaves it alone. Returns how many files were written."""
+    speakers_dir.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for name, data in _import_entries(path):
+        dest = speakers_dir / name
+        if dest.exists():
+            if on_conflict == "skip":
+                continue
+            if on_conflict != "overwrite":
+                base = base_speaker_name(Path(name).stem)
+                dest = speakers_dir / f"{next_versioned_name(base, speakers_dir)}.npy"
+        dest.write_bytes(data)
+        count += 1
     return count
