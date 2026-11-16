@@ -72,6 +72,9 @@ def transcribe_file(file_path: Path, model_size: str, language: Optional[str], t
             vad_filter=True,
             vad_parameters=dict(min_silence_duration_ms=500),
             word_timestamps=False,
+            # No temperature fallback / context carry-over: on CPU they cost 4-5x and made timing erratic
+            temperature=0.0,
+            condition_on_previous_text=False,
         )
 
         results = []
