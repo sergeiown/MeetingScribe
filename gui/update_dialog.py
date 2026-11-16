@@ -6,7 +6,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QProgressBar, QDialogButtonBox
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
+
+from .rounded_progress import RoundedProgressBar
 
 import core
 
@@ -39,7 +41,7 @@ class UpdateDownloadDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(tr("Downloading MeetingScribe {version}...", version=version)))
-        self._progress = QProgressBar()
+        self._progress = RoundedProgressBar()
         self._progress.setRange(0, 100 if total_size else 0)
         layout.addWidget(self._progress)
         self._status = QLabel("")

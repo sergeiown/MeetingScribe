@@ -20,7 +20,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QFont, QIcon
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPlainTextEdit, QProgressBar, QMessageBox
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPlainTextEdit, QMessageBox
+
+from .rounded_progress import RoundedProgressBar
 
 import core
 
@@ -274,7 +276,7 @@ class BootstrapDialog(QDialog):
         label.setWordWrap(True)
         layout.addWidget(label)
 
-        self._progress = QProgressBar()
+        self._progress = RoundedProgressBar()
         self._progress.setRange(0, 0)  # indeterminate
         layout.addWidget(self._progress)
 

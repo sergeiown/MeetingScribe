@@ -295,7 +295,7 @@ QSpinBox::down-arrow {{
 
 QTableWidget::item, QTreeWidget::item {{
     padding: 6px 8px;
-    border-radius: 4px;
+    border-radius: 0;
 }}
 QTableWidget::item:hover, QTreeWidget::item:hover {{
     background: {c['hover_bg']};

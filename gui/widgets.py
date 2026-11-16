@@ -8,11 +8,12 @@ import core
 from PySide6.QtCore import Signal, Qt, QRectF, QPointF
 from PySide6.QtGui import QColor, QPainter, QLinearGradient, QBrush, QPen, QPainterPath
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QProgressBar, QSizePolicy,
+    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QSizePolicy,
     QSlider, QStyle, QStyleOptionSlider, QTableWidget, QWidget,
 )
 
 from .i18n import tr
+from .rounded_progress import RoundedProgressBar
 from .style import current_colors
 
 # Every button that can appear in this row-of-cards area, so they all end up
@@ -257,7 +258,7 @@ class ModelRowWidget(QFrame):
         self._status_label = QLabel()
         top_row.addWidget(self._status_label)
 
-        self._progress = QProgressBar()
+        self._progress = RoundedProgressBar()
         self._progress.setMinimumWidth(220)
         self._progress.setVisible(False)
         top_row.addWidget(self._progress)
