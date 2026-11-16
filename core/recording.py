@@ -311,6 +311,87 @@ class _SourceStream:
             self._pull_thread = None
 
 
+_WRITE_BLOCK = 1 << 18  # output frames per write/mix step
+_CHUNK_FRAMES = 1 << 20  # raw input frames per resample step
+
+
+class _BlockReader:
+    """Pulls exact-size blocks out of a (total, block generator) pair."""
+
+    def __init__(self, stream):
+        self.total, self._gen = stream
+        self._buf = []
+        self._buffered = 0
+
+    def read(self, n: int):
+        import numpy as np
+        while self._buffered < n:
+            try:
+                block = next(self._gen)
+            except StopIteration:
+                break
+            self._buf.append(block)
+            self._buffered += block.shape[0]
+        if not self._buf:
+            return np.zeros((0, 1), dtype=np.float32)
+        data = self._buf[0] if len(self._buf) == 1 else np.concatenate(self._buf, axis=0)
+        out, rest = data[:n], data[n:]
+        self._buf = [rest] if rest.shape[0] else []
+        self._buffered = rest.shape[0]
+        return out
+
+
+def _reconcile_channels(block, src_channels: int, channels: int):
+    import numpy as np
+    if src_channels == channels:
+        return block
+    if src_channels == 1:
+        return np.repeat(block, channels, axis=1)  # mono mic alongside a stereo source - duplicate, don't drop
+    return block.mean(axis=1, keepdims=True).repeat(channels, axis=1)
+
+
+def _resample_stream(path, frames_written: int, active_duration: float, src_channels: int, channels: int):
+    import numpy as np
+    from scipy.signal import resample_poly
+    if frames_written == 0 or active_duration <= 0:
+        return 0, iter(())
+    true_rate = frames_written / active_duration
+    resample = 8000 <= true_rate <= 192000
+    if resample:
+        ratio = Fraction(_TARGET_RATE / true_rate).limit_denominator(10_000)
+        up, down = ratio.numerator, ratio.denominator
+        total = -(-frames_written * up // down)
+    else:
+        up = down = 1
+        total = frames_written
+
+    def gen():
+        with open(path, "rb") as f:
+            def load(start, stop):
+                f.seek(start * src_channels * 4)
+                return np.fromfile(f, dtype=np.float32, count=(stop - start) * src_channels).reshape(-1, src_channels)
+
+            if not resample:
+                for a in range(0, frames_written, _CHUNK_FRAMES):
+                    yield _reconcile_channels(load(a, min(frames_written, a + _CHUNK_FRAMES)), src_channels, channels)
+                return
+            # polyphase FIR reach in input samples, rounded up to a multiple of `down`
+            reach = -(-10 * max(up, down) // up) + 1
+            margin = down * (-(-reach // down))
+            step = down * max(1, _CHUNK_FRAMES // down)
+            for a in range(0, frames_written, step):
+                b = min(frames_written, a + step)
+                lo = max(0, a - margin)
+                hi = min(frames_written, b + margin)
+                out = resample_poly(load(lo, hi), up, down, axis=0)
+                off = (a - lo) * up // down
+                count = (-(-b * up // down) - a * up // down)
+                piece = out[off:off + count].astype(np.float32)
+                yield _reconcile_channels(piece, src_channels, channels)
+
+    return total, gen()
+
+
 class Recorder:
     """One recording session: create, start, poll drain_events(), stop,
     discard. Not reusable across sessions.
@@ -351,7 +432,7 @@ class Recorder:
         # at all ("Invalid number of channels"), since the mic doesn't
         # support the 2 channels the (unrelated) loopback source has.
         # Mismatched channel counts are reconciled once, after resampling,
-        # in _load_and_resample.
+        # in the streaming resampler.
         self._source_channels = [max(1, min(d.channels, 2)) for d, _ in self._device_specs]
         self._channels = max(self._source_channels)
         self._workdir = Path(tempfile.mkdtemp(prefix="meetingscribe_rec_"))
@@ -445,7 +526,8 @@ class Recorder:
         paused = self._paused_accum + (now - self._paused_since if self._paused_since is not None else 0.0)
         return max(0.0, now - self._start_time - paused)
 
-    def stop(self) -> Path:
+    def stop(self, progress=None) -> Path:
+        """progress: optional callable taking an int 0-100 while the file is written."""
         self._stop_flag.set()
         if self._mix_thread is not None:
             self._mix_thread.join(timeout=3.0)
@@ -453,9 +535,7 @@ class Recorder:
 
         # Device-clock span, when available (microphone), bypasses
         # Python-side wall-clock jitter for the rate measurement - see
-        # _SourceStream.device_duration and module docstring. Captured
-        # before src.stop() (harmless either way, but keeps the snapshot
-        # unambiguous).
+        # _SourceStream.device_duration and module docstring.
         wall_clock_duration = self.elapsed_seconds()
         device_durations = [src.device_duration() for src in self._sources]
 
@@ -470,62 +550,65 @@ class Recorder:
                 pass
         self._raw_files = []
 
-        resampled = []
+        readers = []
         for path, frames, device_duration, src_channels in zip(
                 self._raw_paths, self._raw_frame_counts, device_durations, self._source_channels):
             active_duration = (max(0.0, device_duration - self._paused_accum)
                                 if device_duration is not None else wall_clock_duration)
-            resampled.append(self._load_and_resample(path, frames, active_duration, src_channels))
+            readers.append(_BlockReader(self._resampled_blocks(path, frames, active_duration, src_channels)))
         self._raw_paths = []
 
-        mixed = resampled[0] if len(resampled) == 1 else self._mix_final(resampled)
-        self._write_wav(mixed)
+        total = min((r.total for r in readers), default=0)
+        part_path = self._out_path.with_name(self._out_path.name + ".part")
+        try:
+            self._write_wav(readers, total, part_path, progress)
+            import os
+            os.replace(part_path, self._out_path)
+        except BaseException:
+            try:
+                part_path.unlink()
+            except OSError:
+                pass
+            raise
         if self._workdir is not None:
             import shutil
             shutil.rmtree(self._workdir, ignore_errors=True)
             self._workdir = None
         return self._out_path
 
-    def _load_and_resample(self, path: Path, frames_written: int, active_duration: float,
-                            src_channels: int) -> np.ndarray:
-        import numpy as np
-        from scipy.signal import resample_poly
-        if frames_written == 0 or active_duration <= 0:
-            return np.zeros((0, self._channels), dtype=np.float32)
-        raw = np.fromfile(path, dtype=np.float32).reshape(-1, src_channels)
-        true_rate = frames_written / active_duration
-        if 8000 <= true_rate <= 192000:
-            # resample_poly (polyphase FIR, proper anti-aliasing), not the
-            # FFT-based resample(): the latter treats the signal as one
-            # periodic cycle, which is wrong for real, non-periodic speech
-            # and shows up as ringing/artifacts - resample_poly is the
-            # function actually meant for real-world audio like this.
-            ratio = Fraction(_TARGET_RATE / true_rate).limit_denominator(10_000)
-            raw = resample_poly(raw, ratio.numerator, ratio.denominator, axis=0).astype(np.float32)
-        # implausible rate measurement: use as captured rather than distort it further
-        if src_channels == self._channels:
-            return raw
-        if src_channels == 1:
-            return np.repeat(raw, self._channels, axis=1)  # mono mic alongside a stereo source - duplicate, don't drop
-        return raw.mean(axis=1, keepdims=True).repeat(self._channels, axis=1)
+    def _resampled_blocks(self, path: Path, frames_written: int, active_duration: float, src_channels: int):
+        """Yields (total_frames, generator of float32 blocks). Streams the
+        raw file in bounded chunks; the chunked polyphase resample with
+        context margins gives the same samples as resampling the whole
+        array at once, without ever holding the whole recording in memory."""
+        return _resample_stream(path, frames_written, active_duration, src_channels, self._channels)
 
-    def _mix_final(self, sources: list) -> np.ndarray:
+    def _write_wav(self, readers, total: int, part_path: Path, progress) -> None:
         import numpy as np
-        n = min(s.shape[0] for s in sources)
-        if n == 0:
-            return np.zeros((0, self._channels), dtype=np.float32)
-        return sum(s[:n] * _MIX_GAIN for s in sources)
-
-    def _write_wav(self, mixed: np.ndarray) -> None:
-        import numpy as np
-        wf = wave.open(str(self._out_path), "wb")
+        wf = wave.open(str(part_path), "wb")
         try:
             wf.setnchannels(self._channels)
             wf.setsampwidth(2)
             wf.setframerate(_TARGET_RATE)
-            if mixed.size:
-                pcm16 = np.clip(mixed * 32767.0, -32768, 32767).astype(np.int16)
-                wf.writeframes(pcm16.tobytes())
+            done = 0
+            last_pct = -1
+            while done < total:
+                n = min(_WRITE_BLOCK, total - done)
+                blocks = [r.read(n) for r in readers]
+                n = min(b.shape[0] for b in blocks)
+                if n == 0:
+                    break
+                if len(blocks) == 1:
+                    mixed = blocks[0][:n]
+                else:
+                    mixed = sum(b[:n] * _MIX_GAIN for b in blocks)
+                wf.writeframes(np.clip(mixed * 32767.0, -32768, 32767).astype(np.int16).tobytes())
+                done += n
+                if progress is not None:
+                    pct = min(99, int(done * 100 / total))
+                    if pct != last_pct:
+                        last_pct = pct
+                        progress(pct)
         finally:
             wf.close()
 

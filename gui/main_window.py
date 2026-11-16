@@ -13,7 +13,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QHeaderView, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem,
-    QPushButton, QComboBox, QCheckBox, QLabel, QProgressBar, QTextEdit,
+    QPushButton, QComboBox, QCheckBox, QLabel, QTextEdit,
     QFileDialog, QMessageBox, QSpinBox, QToolTip, QToolButton, QMenu, QInputDialog,
 )
 
@@ -35,6 +35,7 @@ from .settings_dialog import SettingsDialog
 from .style import get_prevent_sleep_preference, get_minimize_to_tray_preference
 from .dialogs import SpeakerNameDialog
 from .update_dialog import UpdateDownloadDialog
+from .rounded_progress import RoundedProgressBar
 from .widgets import LevelMeterWidget, SeekSlider, DropTableWidget
 from .workers import TranscriptionWorker, DiarizationWorker, UpdateCheckWorker
 
@@ -327,6 +328,11 @@ class MainWindow(QMainWindow):
         self._active_record_row.addWidget(self._pause_btn)
         self._active_record_row.addWidget(self._stop_btn)
         layout.addLayout(self._active_record_row)
+        self._save_progress_bar = RoundedProgressBar()
+        self._save_progress_bar.setRange(0, 100)
+        self._save_progress_bar.setFormat("%p%")
+        self._save_progress_bar.setVisible(False)
+        layout.addWidget(self._save_progress_bar)
         self._set_active_record_row_visible(False)
 
         outer.addWidget(self._record_box)
@@ -335,6 +341,7 @@ class MainWindow(QMainWindow):
         return panel
 
     def _set_active_record_row_visible(self, visible):
+        self._save_progress_bar.setVisible(False)
         self._record_btn.setVisible(not visible)
         self._pause_btn.setVisible(visible)
         self._stop_btn.setVisible(visible)
@@ -455,6 +462,8 @@ class MainWindow(QMainWindow):
         controller.levels.connect(self._on_recording_levels)
         controller.error.connect(self._on_recording_error)
         controller.stopped.connect(self._on_recording_stopped)
+        controller.save_progress.connect(self._save_progress_bar.setValue)
+        controller.save_failed.connect(self._on_recording_save_failed)
         try:
             controller.start()
         except core.RecordingError as e:
@@ -487,15 +496,14 @@ class MainWindow(QMainWindow):
     def _stop_recording(self):
         if self._recording_controller is None:
             return
-        # Recorder.stop() runs the mix/resample/write-WAV work synchronously
-        # on this (GUI) thread, so the app is briefly unresponsive right
-        # here - without this, the elapsed-time label just sat frozen at
-        # its last value the whole time, with no indication that anything
-        # was happening at all.
-        self._stop_btn.setEnabled(False)
-        self._pause_btn.setEnabled(False)
+        if self._recording_controller.is_saving:
+            return
+        self._elapsed_timer.stop()
+        self._stop_btn.setVisible(False)
+        self._pause_btn.setVisible(False)
+        self._save_progress_bar.setValue(0)
+        self._save_progress_bar.setVisible(True)
         self._record_elapsed_label.setText(tr("Saving..."))
-        QApplication.processEvents()
         self._recording_controller.stop()
 
     def _on_system_suspending(self):
@@ -526,7 +534,17 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, tr("Recording"), message)
         self._stop_recording()
 
+    def _on_recording_save_failed(self, message):
+        self._finish_recording_ui()
+        QMessageBox.warning(self, tr("Recording failed"), message)
+
     def _on_recording_stopped(self, path_str):
+        self._finish_recording_ui()
+        self._refresh_file_list(select_all=False)
+        self._select_file_by_path(Path(path_str))
+        self._refresh_play_button()
+
+    def _finish_recording_ui(self):
         self._recording_controller = None
         self._elapsed_timer.stop()
         self._mic_meter.reset()
@@ -538,9 +556,6 @@ class MainWindow(QMainWindow):
         self._mic_checkbox.setEnabled(True)
         self._system_checkbox.setEnabled(True)
         self._set_recording_indicators(False)
-        self._refresh_file_list(select_all=False)
-        self._select_file_by_path(Path(path_str))
-        self._refresh_play_button()
 
     def _update_elapsed_label(self):
         if self._recording_controller is None:
@@ -742,7 +757,7 @@ class MainWindow(QMainWindow):
         self._overall_label = QLabel(tr("Overall"))
         self._overall_label.setProperty("hint", True)
         status_row.addWidget(self._overall_label)
-        self._overall_progress_bar = QProgressBar()
+        self._overall_progress_bar = RoundedProgressBar()
         self._overall_progress_bar.setTextVisible(True)
         self._overall_progress_bar.setFormat(tr("File %v of %m"))
         status_row.addWidget(self._overall_progress_bar)
@@ -750,7 +765,7 @@ class MainWindow(QMainWindow):
         self._current_file_label = QLabel(tr("Current file"))
         self._current_file_label.setProperty("hint", True)
         status_row.addWidget(self._current_file_label)
-        self._progress_bar = QProgressBar()
+        self._progress_bar = RoundedProgressBar()
         self._progress_bar.setTextVisible(True)
         status_row.addWidget(self._progress_bar)
         col.addLayout(status_row)
@@ -1519,13 +1534,18 @@ class MainWindow(QMainWindow):
             event.ignore()
             self.hide()
             return
+        if self._recording_controller is not None and self._recording_controller.is_saving:
+            QMessageBox.information(
+                self, tr("Saving..."), tr("The recording is still being saved. Quit once it finishes."))
+            event.ignore()
+            return
         if self._recording_controller is not None:
             ans = QMessageBox.question(
                 self, tr("Recording in progress"), tr("A recording is still running. Stop it and quit?"))
             if ans != QMessageBox.Yes:
                 event.ignore()
                 return
-            self._recording_controller.stop()
+            self._recording_controller.stop(wait=True)
         if self._worker is not None:
             ans = QMessageBox.question(
                 self, tr("Transcription running"), tr("A transcription is still running. Cancel it and quit?"))

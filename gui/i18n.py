@@ -374,6 +374,7 @@ _UK = {
     "Resume": "Продовжити",
     "Stop": "Стоп",
     "Saving...": "Збереження...",
+    "The recording is still being saved. Quit once it finishes.": "Запис ще зберігається. Вийдіть після завершення.",
 }
 
 _CATALOG = {"uk": _UK}
