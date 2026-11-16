@@ -357,10 +357,8 @@ class SpeakersTab(QWidget):
                 box.setIcon(QMessageBox.Question)
                 box.setWindowTitle(tr("Import speakers"))
                 box.setText(tr("{n} speaker(s) from the file already exist. Update them or skip?", n=len(conflicts)))
-                box.setInformativeText("
-".join(Path(c).stem for c in conflicts[:10])
-                                       + ("
-..." if len(conflicts) > 10 else ""))
+                box.setInformativeText(
+                    "\n".join(Path(c).stem for c in conflicts[:10]) + ("\n..." if len(conflicts) > 10 else ""))
                 update_btn = box.addButton(tr("Update existing"), QMessageBox.AcceptRole)
                 skip_btn = box.addButton(tr("Skip existing"), QMessageBox.DestructiveRole)
                 box.addButton(tr("Cancel"), QMessageBox.RejectRole)
