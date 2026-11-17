@@ -1,5 +1,6 @@
 """Settings dialog: Models (recognition/diarization), Speakers, General tabs."""
 
+import os
 from pathlib import Path
 
 import core
@@ -591,6 +592,22 @@ class GeneralTab(QWidget):
             self._device_combo.currentIndexChanged.connect(
                 lambda _i: set_device_preference(self._device_combo.currentData()))
             box_layout.addWidget(self._device_combo)
+
+        box_layout.addWidget(QLabel(tr("CPU threads for speech recognition:")))
+        self._threads_combo = QComboBox()
+        self._threads_combo.addItem(tr("Automatic"), 0)
+        for n in sorted({2, 4, 6, 8, 12, 16, os.cpu_count() or 4}):
+            if n <= (os.cpu_count() or 4):
+                self._threads_combo.addItem(str(n), n)
+        try:
+            current_threads = int(core.read_config_env().get("CPU_THREADS", "0"))
+        except ValueError:
+            current_threads = 0
+        idx = self._threads_combo.findData(current_threads)
+        self._threads_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._threads_combo.currentIndexChanged.connect(
+            lambda _i: core.write_config_env({"CPU_THREADS": str(self._threads_combo.currentData())}))
+        box_layout.addWidget(self._threads_combo)
 
         # Always shown, tailored to the actual configuration - CPU-only
         # setups still deserve to know why (and that it's normal, just slower).

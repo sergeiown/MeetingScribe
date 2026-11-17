@@ -218,6 +218,8 @@ _UK = {
     "Export failed": "Помилка експорту",
     "Could not write the export file:\n\n{error}": "Не вдалося записати файл експорту:\n\n{error}",
     "Import speakers": "Імпорт спікерів",
+    "CPU threads for speech recognition:": "Потоки процесора для розпізнавання:",
+    "Automatic": "Автоматично",
     "{n} speaker(s) from the file already exist. Update them or skip?": "Спікерів, що вже існують: {n}. Оновити їх чи пропустити?",
     "Update existing": "Оновити існуючих",
     "Skip existing": "Пропустити існуючих",

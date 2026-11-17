@@ -31,6 +31,15 @@ class TranscribeResult:
     language_probability: float
 
 
+def _configured_cpu_threads() -> int:
+    """CPU_THREADS in config.env; 0 (default, or anything invalid) lets the library decide."""
+    from .config_env import read_config_env
+    try:
+        return max(0, int(read_config_env().get("CPU_THREADS", "0")))
+    except ValueError:
+        return 0
+
+
 def transcribe_file(file_path: Path, model_size: str, language: Optional[str], total_dur: float, *,
                      models_dir: Path = MODELS_DIR,
                      device_preference: str = "auto",
@@ -49,8 +58,9 @@ def transcribe_file(file_path: Path, model_size: str, language: Optional[str], t
     device, compute_type, device_name = detect_device(prefer=device_preference)
     if on_status:
         on_status(f"Loading model {model_size}...")
+    cpu_threads = _configured_cpu_threads() if device == "cpu" else 0
     model = WhisperModel(model_path, device=device, compute_type=compute_type,
-                         download_root=str(model_path_local))
+                         cpu_threads=cpu_threads, download_root=str(model_path_local))
     _log.debug("Model loaded: device=%s compute_type=%s", device, compute_type)
     if on_status:
         on_status(f"Model loaded [{device_name}]")
