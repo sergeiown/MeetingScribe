@@ -382,6 +382,8 @@ _UK = {
     "Transcribing...": "Розшифровка...",
     "Loading diarization pipeline...": "Завантаження конвеєра діаризації...",
     "Diarizing...": "Діаризація...",
+    "Recording in progress - speaker analysis will start after recognition": "Йде запис - аналіз спікерів почнеться після розпізнавання",
+    "Low free memory - speaker analysis will start after recognition": "Мало вільної пам'яті - аналіз спікерів почнеться після розпізнавання",
     "Speaker analysis runs alongside recognition...": "Аналіз спікерів іде паралельно з розпізнаванням...",
     "Diarization done.": "Діаризацію завершено.",
     "Speaker identification...": "Розпізнавання спікерів...",

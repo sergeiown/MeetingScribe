@@ -97,11 +97,13 @@ class _QueueProcessWorker(QObject):
 
 
 class TranscriptionWorker(_QueueProcessWorker):
-    def __init__(self, files, model_size, language, auto_diarize, hf_token, num_speakers, device_preference="auto"):
+    def __init__(self, files, model_size, language, auto_diarize, hf_token, num_speakers, device_preference="auto",
+                 allow_parallel_diarization=True):
         super().__init__()
         from .process_worker import run_transcription_process
         self._target = run_transcription_process
-        self._args = (files, model_size, language, auto_diarize, hf_token, num_speakers, device_preference)
+        self._args = (files, model_size, language, auto_diarize, hf_token, num_speakers, device_preference,
+                      allow_parallel_diarization)
 
 
 class DiarizationWorker(_QueueProcessWorker):

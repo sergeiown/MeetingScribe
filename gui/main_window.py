@@ -1427,7 +1427,8 @@ class MainWindow(QMainWindow):
 
         self._begin_run(len(files))
         self._worker = TranscriptionWorker(files, model_key, language, auto_diarize, hf_token, num_speakers,
-                                           get_device_preference())
+                                           get_device_preference(),
+                                           allow_parallel_diarization=self._recording_controller is None)
         self._connect_worker_signals()
         self._refresh_rename_button()
         self._worker.run()
