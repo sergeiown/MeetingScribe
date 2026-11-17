@@ -42,6 +42,7 @@ _UK = {
     "Polish": "Польська",
     "Dutch": "Нідерландська",
     "Japanese": "Японська",
+    "Russian": "Російська",
     "Auto-detect": "Автовизначення",
     "Speaker diarization": "Розділення за спікерами",
     "Automatically identify speakers\nafter recognition": "Автоматично визначати спікерів\nпісля розпізнавання",

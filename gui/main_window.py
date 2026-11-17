@@ -43,7 +43,7 @@ _PREFERRED_WIDTH = 1340
 _PREFERRED_HEIGHT = 680
 _OTHER_LANGUAGES = [
     ("en", "English"), ("es", "Spanish"), ("de", "German"), ("fr", "French"), ("it", "Italian"),
-    ("pt", "Portuguese"), ("pl", "Polish"), ("nl", "Dutch"), ("ja", "Japanese"),
+    ("pt", "Portuguese"), ("pl", "Polish"), ("nl", "Dutch"), ("ja", "Japanese"), ("ru", "Russian"),
 ]
 _MIN_WIDTH = 920
 _MIN_HEIGHT = 480
