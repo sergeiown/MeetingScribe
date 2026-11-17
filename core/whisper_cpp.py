@@ -7,7 +7,10 @@ import os
 import queue
 import re
 import subprocess
+import http.client
 import threading
+import time
+import urllib.error
 import urllib.request
 from collections import namedtuple
 from pathlib import Path
@@ -79,8 +82,8 @@ def delete_model(size: str, models_dir: Path = MODELS_DIR) -> None:
             pass
 
 
-def _download(url: str, dest: Path, cancel_token: CancelToken,
-              on_progress: Optional[ProgressCb] = None) -> None:
+def _download_once(url: str, dest: Path, cancel_token: CancelToken,
+                   on_progress: Optional[ProgressCb] = None) -> None:
     """Resumable: keeps a .part file and continues it with a Range request."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
@@ -105,6 +108,34 @@ def _download(url: str, dest: Path, cancel_token: CancelToken,
     if total and done < total:
         raise EngineError("download interrupted")
     os.replace(part, dest)
+
+
+_MAX_ATTEMPTS = 8
+
+
+def _is_transient(e: Exception) -> bool:
+    if isinstance(e, urllib.error.HTTPError):
+        return e.code >= 500 or e.code == 429
+    return isinstance(e, (OSError, http.client.HTTPException, EngineError))
+
+
+def _download(url: str, dest: Path, cancel_token: CancelToken,
+              on_progress: Optional[ProgressCb] = None) -> None:
+    """A dropped connection (common on multi-GB transfers) resumes from the
+    .part file instead of failing the whole download."""
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        try:
+            _download_once(url, dest, cancel_token, on_progress)
+            return
+        except Cancelled:
+            raise
+        except Exception as e:
+            if attempt == _MAX_ATTEMPTS or not _is_transient(e):
+                raise
+            _log.warning("Download interrupted (%s), retrying %d/%d", e, attempt, _MAX_ATTEMPTS - 1)
+            for _ in range(attempt * 4):
+                cancel_token.check()
+                time.sleep(0.5)
 
 
 def ensure_model(size: str, models_dir: Path, cancel_token: CancelToken,

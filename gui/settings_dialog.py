@@ -76,6 +76,7 @@ class ModelsTab(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         content = QWidget()
         layout = QVBoxLayout(content)
         scroll.setWidget(content)
@@ -510,6 +511,7 @@ class GeneralTab(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         content = QWidget()
         layout = QVBoxLayout(content)
         # Generous gap between the two group boxes; each keeps its own

@@ -5,7 +5,7 @@ import time
 
 import core
 
-from PySide6.QtCore import Signal, Qt, QRectF, QPointF
+from PySide6.QtCore import Signal, Qt, QRectF, QPointF, QSize
 from PySide6.QtGui import QColor, QPainter, QLinearGradient, QBrush, QPen, QPainterPath
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QSizePolicy,
@@ -107,6 +107,13 @@ class _ElidedLabel(QLabel):
         self.setFixedHeight(self.fontMetrics().height())
         self._update_elided()
 
+    def setText(self, text):
+        self._full_text = text
+        self._update_elided()
+
+    def sizeHint(self):
+        return QSize(self.fontMetrics().horizontalAdvance(self._full_text), self.fontMetrics().height())
+
     def _update_elided(self):
         elided = self.fontMetrics().elidedText(self._full_text, Qt.ElideRight, self.width())
         super().setText(elided)
@@ -115,6 +122,9 @@ class _ElidedLabel(QLabel):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_elided()
+
+    def minimumSizeHint(self):
+        return QSize(0, self.fontMetrics().height())
 
 
 class LevelMeterWidget(QWidget):
@@ -263,7 +273,7 @@ class ModelRowWidget(QFrame):
         size_label.setProperty("hint", True)
         top_row.addWidget(size_label)
 
-        self._status_label = QLabel()
+        self._status_label = _ElidedLabel("")
         top_row.addWidget(self._status_label)
 
         self._progress = RoundedProgressBar()
@@ -343,6 +353,6 @@ class ModelRowWidget(QFrame):
             self._mode = "download"
             self._action_btn.setText(tr("Download"))
             self._action_btn.setEnabled(True)
-            self._status_label.setText(tr("Failed: {error}", error=error[:60]) if error else tr("Failed"))
+            self._status_label.setText(tr("Failed: {error}", error=error) if error else tr("Failed"))
             self._status_label.setToolTip(error)
             self._status_label.setVisible(True)
