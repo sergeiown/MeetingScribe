@@ -1380,6 +1380,7 @@ class MainWindow(QMainWindow):
         self._transcribe_btn.setEnabled(False)
         self._diarize_btn.setEnabled(False)
         self._cancel_btn.setEnabled(True)
+        self._set_run_options_locked(True)
 
     def _connect_worker_signals(self):
         self._worker.status.connect(self._on_status)
@@ -1585,7 +1586,17 @@ class MainWindow(QMainWindow):
         secs = int(time.time() - self._stage_start)
         self._status_label.setText(f"{self._stage_text}  ·  {secs // 60:02d}:{secs % 60:02d}")
 
+    def _set_run_options_locked(self, locked):
+        """Model, language and speaker options belong to the run that is
+        already going; changing them mid-run would only mislead."""
+        self._model_combo.setEnabled(not locked)
+        self._lang_combo.setEnabled(not locked)
+        self._diarize_checkbox.setEnabled(not locked)
+        self._num_speakers_spin.setEnabled(
+            not locked and self._diarize_available and self._diarize_checkbox.isChecked())
+
     def _reset_run_state(self):
+        self._set_run_options_locked(False)
         self._stage_timer.stop()
         self._status_label.setText(self._stage_text)
         core.set_sleep_prevention(False)
