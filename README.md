@@ -63,7 +63,7 @@ falls back to a plain transcript with timestamps.
   English/Ukrainian interface language switch.
 - Automatic language detection, optimized for Ukrainian (other languages are
   supported via Whisper's multilingual model).
-- CPU or NVIDIA CUDA, auto-detected.
+- CPU, NVIDIA CUDA, or AMD/Intel GPU through Vulkan, auto-detected.
 - Skips files already transcribed in `output/` (asks before overwriting), so
   re-running a batch does not redo finished work.
 - Plain-text output, easy to read and diff.
@@ -104,6 +104,13 @@ you do not need to prepare any of it:
    choice is pre-checked. A small demo recording (`samples/demo.wav`) is
    bundled so there's something to try right away, no recording of your own
    required.
+
+> **Only light models are installed by default.** To keep the first download
+> small, MeetingScribe installs just the lightest Whisper model (`small`;
+> plus its GPU counterpart on AMD/Intel GPUs). It is fast, but its accuracy
+> is noticeably lower, especially on noisy or fast speech. **For better
+> quality, open Settings > Models and download `large-v3` or
+> `large-v3-turbo`** (and the matching GPU model there if you use a GPU).
 
 MeetingScribe checks for updates on launch (and via **Help > Check for
 updates**); installing one is a single confirmation away.
@@ -211,7 +218,23 @@ Public repositories, downloaded under their own terms:
 The underlying Whisper model is by OpenAI
 (<https://github.com/openai/whisper>), released under the MIT license.
 
-**Mandatory set:** the four pyannote models plus Whisper `small`.
+### Speech recognition on AMD / Intel GPUs - whisper.cpp (Vulkan)
+
+On machines without an NVIDIA GPU but with a supported AMD or Intel GPU,
+recognition runs through a bundled build of
+[whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) using Vulkan.
+It uses separate model files in `ggml` format, shown in **Settings > Models**
+under "Recognition on GPU (Vulkan)"; only `small` is installed by default.
+
+| Model | Page | Notes |
+|---|---|---|
+| `ggerganov/whisper.cpp` (`ggml-small.bin`) | <https://hf.co/ggerganov/whisper.cpp> | **Default on GPU** - light, fast (~490 MB) |
+| `ggerganov/whisper.cpp` (`ggml-large-v3-turbo.bin`) | <https://hf.co/ggerganov/whisper.cpp> | **Optional** (~1.6 GB) |
+| `ggerganov/whisper.cpp` (`ggml-large-v3.bin`) | <https://hf.co/ggerganov/whisper.cpp> | **Optional** - best accuracy (~3.1 GB) |
+| `ggml-org/whisper-vad` (`ggml-silero-v5.1.2.bin`) | <https://hf.co/ggml-org/whisper-vad> | Voice activity detection (small) |
+
+**Mandatory set:** the four pyannote models plus Whisper `small` (and its GPU
+counterpart on AMD/Intel GPUs).
 **Optional set:** Whisper `large-v3-turbo` and `large-v3`.
 
 ## Built with
