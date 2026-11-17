@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Optional
 
 from .audio import convert_to_wav, format_time, get_duration
-from .cancellation import CancelToken, ProgressFn, StatusFn
-from .device import detect_device
+from . import whisper_cpp
+from .cancellation import Cancelled, CancelToken, ProgressFn, StatusFn
+from .device import detect_device, detect_hardware_info, nvidia_gpu_present
 from .paths import MODELS_DIR
 
 _log = logging.getLogger(__name__)
@@ -40,15 +41,92 @@ def _configured_cpu_threads() -> int:
         return 0
 
 
+def _configured_engine() -> str:
+    """ENGINE in config.env: "auto" (default), "vulkan" or "faster-whisper"."""
+    from .config_env import read_config_env
+    value = read_config_env().get("ENGINE", "auto").strip().lower()
+    return value if value in ("auto", "vulkan", "faster-whisper") else "auto"
+
+
+def choose_engine(device_preference: str = "auto") -> str:
+    """"vulkan" (whisper.cpp on an AMD/Intel GPU) or "faster-whisper" (CUDA/CPU).
+    An NVIDIA GPU keeps faster-whisper: CUDA is faster there."""
+    setting = _configured_engine()
+    if setting == "faster-whisper" or not whisper_cpp.is_available():
+        return "faster-whisper"
+    if setting == "vulkan":
+        return "vulkan"
+    if device_preference == "cpu" or nvidia_gpu_present():
+        return "faster-whisper"
+    gpu_name = detect_hardware_info()[1]
+    return "vulkan" if whisper_cpp.gpu_is_usable(gpu_name) else "faster-whisper"
+
+
+def _assemble_text(segments) -> str:
+    lines = []
+    last_ts = -30
+    for seg in segments:
+        if seg.start - last_ts >= 30:
+            lines.append(f"\n{format_time(seg.start)}")
+            last_ts = seg.start
+        text = seg.text.strip()
+        if text:
+            lines.append(text)
+    return "\n".join(lines).strip()
+
+
+def _transcribe_vulkan(file_path, model_size, language, total_dur, models_dir, cancel_token,
+                       on_status, on_progress) -> TranscribeResult:
+    def download_progress(done, total):
+        if on_status:
+            on_status(f"Downloading GPU model {model_size}: {done * 100 // total}% "
+                      f"({done // (1 << 20)} of {total // (1 << 20)} MB)")
+
+    if on_status and not whisper_cpp.is_model_installed(model_size, models_dir):
+        on_status(f"Downloading GPU model {model_size}...")
+    model_path = whisper_cpp.ensure_model(model_size, models_dir, cancel_token, download_progress)
+    gpu_name = detect_hardware_info()[1] or "GPU"
+    if on_status:
+        on_status(f"Converting to WAV... [{gpu_name}]")
+    wav, tmp_dir = convert_to_wav(file_path)
+    try:
+        dur = total_dur if (total_dur and total_dur > 0) else get_duration(wav)
+        if on_status:
+            on_status("Transcribing...")
+        segments, lang, prob = whisper_cpp.transcribe(
+            wav, model_path, language, dur, models_dir, cancel_token, on_progress)
+        if on_progress:
+            on_progress(dur, dur, "")
+        _log.info("Transcription (Vulkan): lang=%s segments=%d", lang, len(segments))
+        return TranscribeResult(
+            segments=segments, text=_assemble_text(segments), wav_path=wav, tmp_dir=tmp_dir,
+            device="vulkan", compute_type="ggml", device_name=gpu_name,
+            detected_language=lang, language_probability=prob)
+    except BaseException:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+
+
 def transcribe_file(file_path: Path, model_size: str, language: Optional[str], total_dur: float, *,
                      models_dir: Path = MODELS_DIR,
                      device_preference: str = "auto",
                      cancel_token: Optional[CancelToken] = None,
                      on_status: Optional[StatusFn] = None,
                      on_progress: Optional[ProgressFn] = None) -> TranscribeResult:
-    from faster_whisper import WhisperModel
-
     cancel_token = cancel_token or CancelToken()
+
+    if choose_engine(device_preference) == "vulkan":
+        try:
+            return _transcribe_vulkan(file_path, model_size, language, total_dur, models_dir,
+                                      cancel_token, on_status, on_progress)
+        except Cancelled:
+            raise
+        except Exception as e:
+            _log.warning("Vulkan engine failed, falling back to faster-whisper: %s", e)
+            if on_status:
+                on_status("GPU engine failed, using faster-whisper...")
+
+    from faster_whisper import WhisperModel
 
     model_path_local = models_dir / model_size
     model_path = (str(model_path_local)

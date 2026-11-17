@@ -24,7 +24,7 @@
 ; Output: packaging\dist\MeetingScribe-Setup-<version>.exe
 
 #define MyAppName "MeetingScribe"
-#define MyAppVersion "2.3.8"
+#define MyAppVersion "2.3.9"
 #define MyAppPublisher "Serhii Myshko"
 #define MyAppURL "https://github.com/sergeiown/MeetingScribe"
 #define SourceRoot "..\"
@@ -81,6 +81,7 @@ Source: "{#SourceRoot}run_gui.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}config.env.example"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceRoot}packaging\vendor\whisper-vulkan\*"; DestDir: "{app}\bin\whisper-vulkan"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\venv\Scripts\pythonw.exe"; Parameters: """{app}\run_gui.py"""; WorkingDir: "{app}"; IconFilename: "{app}\img\icon.ico"

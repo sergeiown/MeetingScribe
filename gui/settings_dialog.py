@@ -608,6 +608,17 @@ class GeneralTab(QWidget):
         self._threads_combo.currentIndexChanged.connect(
             lambda _i: core.write_config_env({"CPU_THREADS": str(self._threads_combo.currentData())}))
         box_layout.addWidget(self._threads_combo)
+        if core.whisper_cpp.is_available():
+            box_layout.addWidget(QLabel(tr("Speech recognition engine:")))
+            self._engine_combo = QComboBox()
+            self._engine_combo.addItem(tr("Automatic (GPU if supported)"), "auto")
+            self._engine_combo.addItem(tr("GPU via Vulkan (AMD / Intel)"), "vulkan")
+            self._engine_combo.addItem(tr("CPU / NVIDIA (faster-whisper)"), "faster-whisper")
+            idx = self._engine_combo.findData(core.read_config_env().get("ENGINE", "auto").strip().lower())
+            self._engine_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            self._engine_combo.currentIndexChanged.connect(
+                lambda _i: core.write_config_env({"ENGINE": self._engine_combo.currentData()}))
+            box_layout.addWidget(self._engine_combo)
 
         # Always shown, tailored to the actual configuration - CPU-only
         # setups still deserve to know why (and that it's normal, just slower).

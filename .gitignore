@@ -13,3 +13,4 @@ __pycache__/
 packaging/dist/
 packaging/*.log
 packaging/BUILDING.md
+packaging/vendor/
