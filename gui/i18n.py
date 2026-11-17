@@ -196,7 +196,7 @@ _UK = {
     "Delete": "Видалити",
     "Stop the recording before starting recognition.": "Зупиніть запис перед запуском розпізнавання.",
     "Low memory": "Мало пам'яті",
-    "Recognition is running and only {gb} GB of memory is free. The recording may stutter and recognition may slow down. Start recording anyway?": "Йде розпізнавання, а вільної пам'яті лише {gb} ГБ. Запис може уривчастись, а розпізнавання сповільнитися. Усе одно почати запис?",
+    "Recognition is running and only {gb} GB of memory is free. The recording may have audio gaps and recognition may slow down. Start recording anyway?": "Триває розпізнавання, а вільної пам'яті лише {gb} ГБ. У записі можуть з'явитися пропуски звуку, а розпізнавання може сповільнитися. Усе одно почати запис?",
     "Starting recognition engine...": "Запуск рушія розпізнавання...",
     "Loading GPU model...": "Завантаження моделі на GPU...",
     "Detecting speech...": "Пошук мовлення...",

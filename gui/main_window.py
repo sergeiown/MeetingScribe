@@ -438,8 +438,8 @@ class MainWindow(QMainWindow):
             return True
         ans = QMessageBox.question(
             self, tr("Low memory"),
-            tr("Recognition is running and only {gb} GB of memory is free. The recording may stutter "
-               "and recognition may slow down. Start recording anyway?", gb=f"{free:.1f}"),
+            tr("Recognition is running and only {gb} GB of memory is free. The recording may have audio "
+               "gaps and recognition may slow down. Start recording anyway?", gb=f"{free:.1f}"),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         return ans == QMessageBox.Yes
 
