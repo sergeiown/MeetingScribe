@@ -382,6 +382,7 @@ _UK = {
     "Transcribing...": "Розшифровка...",
     "Loading diarization pipeline...": "Завантаження конвеєра діаризації...",
     "Diarizing...": "Діаризація...",
+    "Speaker analysis runs alongside recognition...": "Аналіз спікерів іде паралельно з розпізнаванням...",
     "Diarization done.": "Діаризацію завершено.",
     "Speaker identification...": "Розпізнавання спікерів...",
     "Loading embedding model...": "Завантаження моделі ембеддингів...",

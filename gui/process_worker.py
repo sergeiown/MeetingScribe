@@ -67,15 +67,30 @@ def run_transcription_process(files, model_size, language, auto_diarize, hf_toke
         progress_q.put(("speaker_decision_needed", label, samples, index, total))
         return decision_q.get()  # blocks this process only, until the GUI answers
 
+    # Speaker analysis is independent of the transcript, so when recognition
+    # runs on the GPU it can use the otherwise idle CPU at the same time.
+    # On a CPU-only recognition run the two would just compete for cores.
+    parallel_diarization = bool(auto_diarize and hf_token and core.uses_vulkan(model_size, device_preference))
+
     try:
         for i, f in enumerate(files, 1):
             progress_q.put(("file_started", f.name, i, len(files)))
             tmp_dir = None
+            background = None
             try:
                 cancel_token.check()
+                prepared = None
+                if parallel_diarization:
+                    on_status("Converting to WAV...")
+                    prepared = core.convert_to_wav(f)
+                    tmp_dir = prepared[1]
+                    background = _BackgroundDiarization(
+                        core, prepared[0], hf_token, num_speakers, device_preference, cancel_token)
+                    on_status("Speaker analysis runs alongside recognition...")
                 result = core.transcribe_file(
                     f, model_size, language, core.get_duration(f), device_preference=device_preference,
-                    cancel_token=cancel_token, on_status=on_status, on_progress=on_transcribe_progress)
+                    cancel_token=cancel_token, on_status=on_status, on_progress=on_transcribe_progress,
+                    prepared_wav=prepared)
                 tmp_dir = result.tmp_dir
                 text = result.text
                 diarized = False
@@ -83,8 +98,14 @@ def run_transcription_process(files, model_size, language, auto_diarize, hf_toke
 
                 if auto_diarize and hf_token:
                     try:
-                        text = _diarize_and_label(core, result.wav_path, result.segments, hf_token, num_speakers,
-                                                  device_preference, cancel_token, on_status, on_diarize_progress, decide)
+                        if background is not None:
+                            dr = background.wait(cancel_token, on_status, on_diarize_progress)
+                            text = _label_with_diarization(core, dr, result.segments, hf_token, cancel_token,
+                                                           on_status, decide)
+                        else:
+                            text = _diarize_and_label(core, result.wav_path, result.segments, hf_token, num_speakers,
+                                                      device_preference, cancel_token, on_status, on_diarize_progress,
+                                                      decide)
                         diarized = True
                     except core.Cancelled:
                         raise
@@ -108,6 +129,8 @@ def run_transcription_process(files, model_size, language, auto_diarize, hf_toke
             except Exception as e:
                 progress_q.put(("file_failed", f.name, str(e)))
             finally:
+                if background is not None:
+                    background.abort()
                 if tmp_dir:
                     shutil.rmtree(tmp_dir, ignore_errors=True)
         progress_q.put(("finished",))
@@ -171,11 +194,59 @@ def run_diarize_process(files, hf_token, num_speakers, device_preference, progre
         progress_q.put(("finished",))
 
 
+class _BackgroundDiarization:
+    """core.diarize on a worker thread. Its status/progress are kept, not
+    forwarded, until wait(): during recognition the GUI shows only that."""
+
+    def __init__(self, core, wav_path, hf_token, num_speakers, device_preference, cancel_token):
+        self.result = None
+        self.error = None
+        self._status = ""
+        self._progress = None
+        self._thread = threading.Thread(
+            target=self._run, args=(core, wav_path, hf_token, num_speakers, device_preference, cancel_token),
+            daemon=True)
+        self._thread.start()
+
+    def _run(self, core, wav_path, hf_token, num_speakers, device_preference, cancel_token):
+        try:
+            self.result = core.diarize(
+                wav_path, hf_token, num_speakers, device_preference=device_preference,
+                cancel_token=cancel_token, on_status=self._set_status, on_progress=self._set_progress)
+        except BaseException as e:
+            self.error = e
+
+    def _set_status(self, msg):
+        self._status = msg
+
+    def _set_progress(self, cur, total, label):
+        self._progress = (cur, total, label)
+
+    def wait(self, cancel_token, on_status, on_progress):
+        if self._thread.is_alive() and self._status:
+            on_status(self._status)
+        while self._thread.is_alive():
+            self._thread.join(0.5)
+            if self._progress is not None:
+                on_progress(*self._progress)
+            cancel_token.check()
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+    def abort(self):
+        self._thread.join(timeout=10)
+
+
 def _diarize_and_label(core, wav_path, segments, hf_token, num_speakers, device_preference,
                         cancel_token, on_status, on_progress, decide):
     dr = core.diarize(
         wav_path, hf_token, num_speakers, device_preference=device_preference,
         cancel_token=cancel_token, on_status=on_status, on_progress=on_progress)
+    return _label_with_diarization(core, dr, segments, hf_token, cancel_token, on_status, decide)
+
+
+def _label_with_diarization(core, dr, segments, hf_token, cancel_token, on_status, decide):
     spk_db = core.load_speaker_db()
     spk_names = {}
     if spk_db:

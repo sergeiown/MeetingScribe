@@ -85,13 +85,19 @@ def _assemble_text(segments) -> str:
     return "\n".join(lines).strip()
 
 
+def uses_vulkan(model_size: str, device_preference: str = "auto", models_dir: Path = MODELS_DIR) -> bool:
+    """True when transcribe_file would run on the Vulkan GPU engine for this model."""
+    return (choose_engine(device_preference) == "vulkan"
+            and whisper_cpp.is_model_installed(model_size, models_dir))
+
+
 def _transcribe_vulkan(file_path, model_size, language, total_dur, models_dir, cancel_token,
-                       on_status, on_progress) -> TranscribeResult:
+                       on_status, on_progress, prepared_wav=None) -> TranscribeResult:
     model_path = whisper_cpp.ggml_model_path(model_size, models_dir)
     gpu_name = detect_hardware_info()[1] or "GPU"
     if on_status:
         on_status(f"Converting to WAV... [{gpu_name}]")
-    wav, tmp_dir = convert_to_wav(file_path)
+    wav, tmp_dir = prepared_wav or convert_to_wav(file_path)
     try:
         dur = total_dur if (total_dur and total_dur > 0) else get_duration(wav)
         if on_status:
@@ -106,7 +112,8 @@ def _transcribe_vulkan(file_path, model_size, language, total_dur, models_dir, c
             device="vulkan", compute_type="ggml", device_name=gpu_name,
             detected_language=lang, language_probability=prob)
     except BaseException:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        if not prepared_wav:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
         raise
 
 
@@ -115,7 +122,10 @@ def transcribe_file(file_path: Path, model_size: str, language: Optional[str], t
                      device_preference: str = "auto",
                      cancel_token: Optional[CancelToken] = None,
                      on_status: Optional[StatusFn] = None,
-                     on_progress: Optional[ProgressFn] = None) -> TranscribeResult:
+                     on_progress: Optional[ProgressFn] = None,
+                     prepared_wav: Optional[tuple] = None) -> TranscribeResult:
+    """prepared_wav: (wav_path, tmp_dir) already made by the caller, who then
+    owns cleaning tmp_dir up (even on failure)."""
     cancel_token = cancel_token or CancelToken()
 
     engine = choose_engine(device_preference)
@@ -127,7 +137,7 @@ def transcribe_file(file_path: Path, model_size: str, language: Optional[str], t
     if engine == "vulkan":
         try:
             return _transcribe_vulkan(file_path, model_size, language, total_dur, models_dir,
-                                      cancel_token, on_status, on_progress)
+                                      cancel_token, on_status, on_progress, prepared_wav)
         except Cancelled:
             raise
         except Exception as e:
@@ -154,7 +164,7 @@ def transcribe_file(file_path: Path, model_size: str, language: Optional[str], t
 
     if on_status:
         on_status("Converting to WAV...")
-    wav, tmp_dir = convert_to_wav(file_path)
+    wav, tmp_dir = prepared_wav or convert_to_wav(file_path)
     try:
         # Duration can be 0 if ffprobe couldn't read the original path; recompute from the ASCII copy.
         dur = total_dur if (total_dur and total_dur > 0) else get_duration(wav)
@@ -208,5 +218,6 @@ def transcribe_file(file_path: Path, model_size: str, language: Optional[str], t
             language_probability=info.language_probability,
         )
     except Exception:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        if not prepared_wav:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
         raise
