@@ -176,3 +176,23 @@ def set_sleep_prevention(active: bool) -> None:
             ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
     except Exception:
         pass
+
+
+def available_memory_gb():
+    """Physical memory Windows could hand out right now (free plus cache), in GB, or None."""
+    try:
+        import ctypes
+
+        class _MemoryStatus(ctypes.Structure):
+            _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+        status = _MemoryStatus()
+        status.dwLength = ctypes.sizeof(_MemoryStatus)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+        return status.ullAvailPhys / (1 << 30)
+    except Exception:
+        return None

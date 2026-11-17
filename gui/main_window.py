@@ -45,6 +45,7 @@ _OTHER_LANGUAGES = [
     ("en", "English"), ("es", "Spanish"), ("de", "German"), ("fr", "French"), ("it", "Italian"),
     ("pt", "Portuguese"), ("pl", "Polish"), ("nl", "Dutch"), ("ja", "Japanese"), ("ru", "Russian"),
 ]
+_MIN_FREE_GB_TO_RECORD_DURING_RUN = 2.0
 _MIN_WIDTH = 920
 _MIN_HEIGHT = 480
 _SIDEBAR_WIDTH = 300
@@ -418,13 +419,40 @@ class MainWindow(QMainWindow):
         else:
             self._begin_countdown()
 
+    def _recording_blocks_recognition(self):
+        return self._recording_controller is not None or self._countdown_timer.isActive()
+
+    def _update_recognition_buttons(self):
+        blocked = self._recording_blocks_recognition()
+        self._transcribe_btn.setEnabled(self._worker is None and not blocked)
+        self._transcribe_btn.setToolTip(tr("Stop the recording before starting recognition.") if blocked else "")
+        self._refresh_diarize_button()
+
+    def _confirm_record_during_run(self):
+        """Recognition and speaker analysis are memory-hungry: with little memory
+        left, a recording started now can stutter and slow the run down."""
+        if self._worker is None:
+            return True
+        free = core.available_memory_gb()
+        if free is None or free >= _MIN_FREE_GB_TO_RECORD_DURING_RUN:
+            return True
+        ans = QMessageBox.question(
+            self, tr("Low memory"),
+            tr("Recognition is running and only {gb} GB of memory is free. The recording may stutter "
+               "and recognition may slow down. Start recording anyway?", gb=f"{free:.1f}"),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        return ans == QMessageBox.Yes
+
     def _begin_countdown(self):
+        if not self._confirm_record_during_run():
+            return
         self._countdown_remaining = _RECORD_COUNTDOWN_SECONDS
         self._record_btn.setText(tr("Cancel"))
         self._mic_checkbox.setEnabled(False)
         self._system_checkbox.setEnabled(False)
         self._record_elapsed_label.setText(str(self._countdown_remaining))
         self._countdown_timer.start(1000)
+        self._update_recognition_buttons()
 
     def _cancel_countdown(self):
         self._countdown_timer.stop()
@@ -490,6 +518,7 @@ class MainWindow(QMainWindow):
             return
 
         self._recording_controller = controller
+        self._update_recognition_buttons()
         self._elapsed_timer.start(500)
         self._pause_btn.setText(tr("Pause"))
         self._set_active_record_row_visible(True)
@@ -510,6 +539,7 @@ class MainWindow(QMainWindow):
         self._mic_checkbox.setEnabled(True)
         self._system_checkbox.setEnabled(True)
         self._record_elapsed_label.setText("00:00")
+        self._update_recognition_buttons()
 
     def _stop_recording(self):
         if self._recording_controller is None:
@@ -574,6 +604,7 @@ class MainWindow(QMainWindow):
         self._mic_checkbox.setEnabled(True)
         self._system_checkbox.setEnabled(True)
         self._set_recording_indicators(False)
+        self._update_recognition_buttons()
 
     def _update_elapsed_label(self):
         if self._recording_controller is None:
@@ -1008,7 +1039,8 @@ class MainWindow(QMainWindow):
         available = has_package and not models_missing
         selected = self._selected_files()
         diarizable = available and any(core.file_status(f)[1] for f in selected)
-        self._diarize_btn.setEnabled(diarizable and self._worker is None)
+        self._diarize_btn.setEnabled(diarizable and self._worker is None
+                                     and not self._recording_blocks_recognition())
         self._set_primary_run_button(self._diarize_btn if diarizable else self._transcribe_btn)
         if not available:
             self._diarize_btn.setToolTip(
@@ -1392,7 +1424,14 @@ class MainWindow(QMainWindow):
         self._worker.finished.connect(self._on_finished)
         self._worker.cancelled.connect(self._on_cancelled)
 
+    def _warn_recording_blocks_recognition(self):
+        QMessageBox.information(
+            self, tr("Recording in progress"), tr("Stop the recording before starting recognition."))
+
     def _on_transcribe(self):
+        if self._recording_blocks_recognition():
+            self._warn_recording_blocks_recognition()
+            return
         files = self._selected_files()
         if not files:
             QMessageBox.information(self, tr("No files selected"), tr("Select one or more files in the table first."))
@@ -1427,13 +1466,15 @@ class MainWindow(QMainWindow):
 
         self._begin_run(len(files))
         self._worker = TranscriptionWorker(files, model_key, language, auto_diarize, hf_token, num_speakers,
-                                           get_device_preference(),
-                                           allow_parallel_diarization=self._recording_controller is None)
+                                           get_device_preference())
         self._connect_worker_signals()
         self._refresh_rename_button()
         self._worker.run()
 
     def _on_diarize(self):
+        if self._recording_blocks_recognition():
+            self._warn_recording_blocks_recognition()
+            return
         files = [f for f in self._selected_files() if core.file_status(f)[1]]
         if not files:
             QMessageBox.information(
@@ -1601,9 +1642,9 @@ class MainWindow(QMainWindow):
         self._stage_timer.stop()
         self._status_label.setText(self._stage_text)
         core.set_sleep_prevention(False)
-        self._transcribe_btn.setEnabled(True)
         self._cancel_btn.setEnabled(False)
         self._worker = None
+        self._update_recognition_buttons()
         # setRange(0, 0) puts a QProgressBar into a continuously-animating
         # busy state - left running otherwise, since nothing else stops it
         # once the worker that was feeding it real progress is gone.

@@ -194,6 +194,9 @@ _UK = {
     # widgets.py (ModelRowWidget)
     "Installed": "Встановлено",
     "Delete": "Видалити",
+    "Stop the recording before starting recognition.": "Зупиніть запис перед запуском розпізнавання.",
+    "Low memory": "Мало пам'яті",
+    "Recognition is running and only {gb} GB of memory is free. The recording may stutter and recognition may slow down. Start recording anyway?": "Йде розпізнавання, а вільної пам'яті лише {gb} ГБ. Запис може уривчастись, а розпізнавання сповільнитися. Усе одно почати запис?",
     "Starting recognition engine...": "Запуск рушія розпізнавання...",
     "Loading GPU model...": "Завантаження моделі на GPU...",
     "Detecting speech...": "Пошук мовлення...",
@@ -382,8 +385,6 @@ _UK = {
     "Transcribing...": "Розшифровка...",
     "Loading diarization pipeline...": "Завантаження конвеєра діаризації...",
     "Diarizing...": "Діаризація...",
-    "Recording in progress - speaker analysis will start after recognition": "Йде запис - аналіз спікерів почнеться після розпізнавання",
-    "Low free memory - speaker analysis will start after recognition": "Мало вільної пам'яті - аналіз спікерів почнеться після розпізнавання",
     "Speaker analysis runs alongside recognition...": "Аналіз спікерів іде паралельно з розпізнаванням...",
     "Diarization done.": "Діаризацію завершено.",
     "Speaker identification...": "Розпізнавання спікерів...",

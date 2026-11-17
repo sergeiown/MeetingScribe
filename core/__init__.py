@@ -23,7 +23,7 @@ from .paths import (
 from .logging_setup import init_logger, log_ml_versions
 from .cancellation import Cancelled, CancelToken, ProgressFn, StatusFn
 from .device import (
-    detect_device, set_sleep_prevention,
+    detect_device, set_sleep_prevention, available_memory_gb,
     nvidia_gpu_present, nvidia_gpu_name, detect_hardware_info,
 )
 from .audio import (
@@ -67,7 +67,7 @@ __all__ = [
     "SUPPORTED_EXTENSIONS", "ensure_workdirs",
     "init_logger", "log_ml_versions",
     "Cancelled", "CancelToken", "ProgressFn", "StatusFn",
-    "detect_device", "set_sleep_prevention",
+    "detect_device", "set_sleep_prevention", "available_memory_gb",
     "nvidia_gpu_present", "nvidia_gpu_name", "detect_hardware_info",
     "find_ffmpeg", "get_duration", "format_duration", "format_time", "convert_to_wav",
     "MediaError", "FFPROBE", "FFMPEG",

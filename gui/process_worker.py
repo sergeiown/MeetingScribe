@@ -31,32 +31,8 @@ class ProcessCancelToken:
             raise core.Cancelled()
 
 
-_MIN_AVAILABLE_GB_FOR_PARALLEL = 5.0
-
-
-def _available_memory_gb():
-    """Physical memory Windows could hand out right now (free plus cache), or None."""
-    try:
-        import ctypes
-
-        class _MemoryStatus(ctypes.Structure):
-            _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
-                        ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
-                        ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
-                        ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
-                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
-
-        status = _MemoryStatus()
-        status.dwLength = ctypes.sizeof(_MemoryStatus)
-        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
-        return status.ullAvailPhys / (1 << 30)
-    except Exception:
-        return None
-
-
 def run_transcription_process(files, model_size, language, auto_diarize, hf_token,
-                               num_speakers, device_preference, allow_parallel_diarization,
-                               progress_q, decision_q, cancel_event):
+                               num_speakers, device_preference, progress_q, decision_q, cancel_event):
     """Entry point for the child process; must stay module-level so
     multiprocessing can pickle it under Windows' spawn method. Never
     imports gui/PySide6.
@@ -95,14 +71,6 @@ def run_transcription_process(files, model_size, language, auto_diarize, hf_toke
     # runs on the GPU it can use the otherwise idle CPU at the same time.
     # On a CPU-only recognition run the two would just compete for cores.
     parallel_diarization = bool(auto_diarize and hf_token and core.uses_vulkan(model_size, device_preference))
-    if parallel_diarization:
-        available = _available_memory_gb()
-        if not allow_parallel_diarization:
-            parallel_diarization = False
-            on_status("Recording in progress - speaker analysis will start after recognition")
-        elif available is not None and available < _MIN_AVAILABLE_GB_FOR_PARALLEL:
-            parallel_diarization = False
-            on_status("Low free memory - speaker analysis will start after recognition")
 
     try:
         for i, f in enumerate(files, 1):
