@@ -31,7 +31,7 @@ from .audio import (
     MediaError, FFPROBE, FFMPEG,
 )
 from . import whisper_cpp
-from .transcription import transcribe_file, TranscribeResult, Segment
+from .transcription import transcribe_file, choose_engine, TranscribeResult, Segment
 from .diarization import diarize, DiarizeResult
 from .speakers import (
     SPEAKER_ID_THRESHOLD,
@@ -71,7 +71,7 @@ __all__ = [
     "nvidia_gpu_present", "nvidia_gpu_name", "detect_hardware_info",
     "find_ffmpeg", "get_duration", "format_duration", "format_time", "convert_to_wav",
     "MediaError", "FFPROBE", "FFMPEG",
-    "transcribe_file", "TranscribeResult", "Segment", "whisper_cpp",
+    "transcribe_file", "choose_engine", "TranscribeResult", "Segment", "whisper_cpp",
     "diarize", "DiarizeResult",
     "SPEAKER_ID_THRESHOLD",
     "base_speaker_name", "next_versioned_name", "latest_versioned_file", "load_speaker_db",

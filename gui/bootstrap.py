@@ -127,8 +127,9 @@ class _InstallWorker(QObject):
     finished = Signal(bool, str, str)  # ok, error, model_error
 
     def __init__(self, requirements_path: Path, install_deps: bool,
-                 model_spec=None, hf_token: str = ""):
+                 model_spec=None, hf_token: str = "", gpu_model_key: str = ""):
         super().__init__()
+        self._gpu_model_key = gpu_model_key
         self._requirements_path = requirements_path
         self._install_deps = install_deps
         self._model_spec = model_spec
@@ -191,6 +192,8 @@ class _InstallWorker(QObject):
             model_total = 0
             if self._model_spec is not None:
                 model_total = core.whisper_model_bytes(self._model_spec, self._hf_token) or 0
+            if self._gpu_model_key:
+                model_total += core.whisper_cpp.GGML_BYTES.get(self._gpu_model_key, 0)
             self._total_bytes = (base_total + cuda_total + model_total) if known else None
             self._bytes_done = 0
 
@@ -207,6 +210,8 @@ class _InstallWorker(QObject):
                         self.line.emit(f"CUDA torch install failed (code {code}) - continuing on CPU.")
 
             model_error = self._download_model() if self._model_spec is not None else ""
+            if self._gpu_model_key:
+                model_error = self._download_gpu_model() or model_error
             self.finished.emit(True, "", model_error)
         except Exception as e:
             self.finished.emit(False, str(e), "")
@@ -228,6 +233,24 @@ class _InstallWorker(QObject):
             return str(e)
 
 
+    def _download_gpu_model(self) -> str:
+        key = self._gpu_model_key
+        self.line.emit(f"Downloading {key} model for the GPU ({core.whisper_cpp.GGML_SIZES.get(key, '')})...")
+        bytes_before = self._bytes_done
+
+        def on_progress(done, total):
+            if self._total_bytes:
+                self.progress_fraction.emit(min((bytes_before + done) / self._total_bytes, 1.0))
+
+        try:
+            token = core.CancelToken()
+            core.whisper_cpp.ensure_vad(core.MODELS_DIR, token)
+            core.whisper_cpp.ensure_model(key, core.MODELS_DIR, token, on_progress)
+            return ""
+        except Exception as e:
+            return str(e)
+
+
 class BootstrapDialog(QDialog):
     """Modal progress dialog shown once while pip installs the heavy
     dependencies, with a small terminal-style scrollback of recent output."""
@@ -235,7 +258,7 @@ class BootstrapDialog(QDialog):
     _LOG_VISIBLE_LINES = 5
 
     def __init__(self, requirements_path: Path, install_deps: bool = True,
-                 model_spec=None, hf_token: str = "", parent=None):
+                 model_spec=None, hf_token: str = "", parent=None, gpu_model_key: str = ""):
         super().__init__(parent)
         self.setWindowTitle(tr("MeetingScribe - Setting up"))
         # This is typically the very first window shown (parent=None, before
@@ -271,7 +294,7 @@ class BootstrapDialog(QDialog):
             explanation = tr(
                 "Downloading the {model} speech-recognition model - a "
                 "one-time download. The line below shows progress.",
-                model=model_spec.label if model_spec else "")
+                model=model_spec.label if model_spec else (gpu_model_key + " (GPU)"))
         label = QLabel(explanation)
         label.setWordWrap(True)
         layout.addWidget(label)
@@ -300,7 +323,7 @@ class BootstrapDialog(QDialog):
         layout.addWidget(self._log_view)
 
         self._thread = QThread(self)
-        self._worker = _InstallWorker(requirements_path, install_deps, model_spec, hf_token)
+        self._worker = _InstallWorker(requirements_path, install_deps, model_spec, hf_token, gpu_model_key)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.line.connect(self._on_line)
@@ -373,16 +396,17 @@ class BootstrapDialog(QDialog):
         self.accept()
 
 
-def ensure_dependencies(requirements_path: Path, model_spec=None, hf_token: str = "", parent=None):
+def ensure_dependencies(requirements_path: Path, model_spec=None, hf_token: str = "", parent=None,
+                        gpu_model_key: str = ""):
     """(ok, model_error). ok is True once the heavy ML dependencies are
     installed and usable. model_error is a non-fatal message if model_spec
     was given and its download failed (empty otherwise). Shows one combined
     dialog covering whichever of (pip deps, model_spec) is actually needed."""
     _ensure_recording_deps()
     install_deps = not dependencies_installed()
-    if not install_deps and model_spec is None:
+    if not install_deps and model_spec is None and not gpu_model_key:
         return True, ""
-    dlg = BootstrapDialog(requirements_path, install_deps, model_spec, hf_token, parent)
+    dlg = BootstrapDialog(requirements_path, install_deps, model_spec, hf_token, parent, gpu_model_key)
     dlg.start()
     dlg.exec()
     if not dlg.ok:

@@ -27,6 +27,7 @@ _VAD_FILE = "ggml-silero-v5.1.2.bin"
 _MIN_MODEL_BYTES = 10 * 1024 * 1024
 
 GGML_SIZES = {"large-v3": "~3.1 GB", "large-v3-turbo": "~1.6 GB", "small": "~490 MB"}
+GGML_BYTES = {"large-v3": 3095033483, "large-v3-turbo": 1624555275, "small": 487601967}
 
 _GPU_VENDORS = re.compile(r"amd|radeon|intel|arc\b", re.IGNORECASE)
 _SEGMENT = re.compile(r"^\[(\d+):(\d+):(\d+(?:\.\d+)?) --> (\d+):(\d+):(\d+(?:\.\d+)?)\]\s*(.*)$")
@@ -61,6 +62,12 @@ def ggml_model_path(size: str, models_dir: Path = MODELS_DIR) -> Path:
 def is_model_installed(size: str, models_dir: Path = MODELS_DIR) -> bool:
     p = ggml_model_path(size, models_dir)
     return p.exists() and p.stat().st_size > _MIN_MODEL_BYTES
+
+
+def needs_first_run_model(size: str, models_dir: Path = MODELS_DIR) -> bool:
+    """True only before GPU models were ever offered (the ggml folder doesn't
+    exist yet), so a model the user deleted on purpose isn't fetched again."""
+    return not ggml_dir(models_dir).exists() and not is_model_installed(size, models_dir)
 
 
 def delete_model(size: str, models_dir: Path = MODELS_DIR) -> None:

@@ -111,7 +111,12 @@ def main():
     model_to_bundle = None
     if not core.installed_whisper_sizes():
         model_to_bundle = next(s for s in core.WHISPER_MODELS if s.mandatory)
-    needs_bootstrap = model_to_bundle is not None or not dependencies_installed()
+    gpu_model_key = ""
+    if core.whisper_cpp.is_available():
+        mandatory_key = next(s.key for s in core.WHISPER_MODELS if s.mandatory)
+        if core.whisper_cpp.needs_first_run_model(mandatory_key) and core.choose_engine("auto") == "vulkan":
+            gpu_model_key = mandatory_key
+    needs_bootstrap = model_to_bundle is not None or bool(gpu_model_key) or not dependencies_installed()
 
     # Fills the otherwise-blank stretch before MainWindow is ready to show.
     # Skipped ahead of a first-run bootstrap: that flow has its own, much
@@ -130,7 +135,7 @@ def main():
 
     ok, model_error = ensure_dependencies(
         core.SCRIPT_DIR / "requirements.txt",
-        model_spec=model_to_bundle, hf_token=core.read_hf_token())
+        model_spec=model_to_bundle, hf_token=core.read_hf_token(), gpu_model_key=gpu_model_key)
     if not ok:
         sys.exit(1)
 
