@@ -7,7 +7,7 @@ from pathlib import Path
 
 import core
 
-from PySide6.QtCore import Qt, QEvent, QSettings, QThread, QTimer, QUrl, QFileSystemWatcher
+from PySide6.QtCore import Qt, QCollator, QEvent, QLocale, QSettings, QThread, QTimer, QUrl, QFileSystemWatcher
 from PySide6.QtGui import QDesktopServices, QTextCursor, QColor, QFont, QFontMetrics
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWidgets import (
@@ -41,6 +41,10 @@ from .workers import TranscriptionWorker, DiarizationWorker, UpdateCheckWorker
 
 _PREFERRED_WIDTH = 1340
 _PREFERRED_HEIGHT = 680
+_OTHER_LANGUAGES = [
+    ("en", "English"), ("es", "Spanish"), ("de", "German"), ("fr", "French"), ("it", "Italian"),
+    ("pt", "Portuguese"), ("pl", "Polish"), ("nl", "Dutch"), ("ja", "Japanese"),
+]
 _MIN_WIDTH = 920
 _MIN_HEIGHT = 480
 _SIDEBAR_WIDTH = 300
@@ -711,8 +715,7 @@ class MainWindow(QMainWindow):
         options_form.setRowWrapPolicy(QFormLayout.WrapAllRows)
         self._model_combo = QComboBox()
         self._lang_combo = QComboBox()
-        self._lang_combo.addItem(tr("Auto-detect"), "auto")
-        self._lang_combo.addItem(tr("Ukrainian"), "uk")
+        self._fill_language_combo()
         default_lang = QSettings("MeetingScribe", "MeetingScribe").value("default_language", "auto")
         idx = self._lang_combo.findData(default_lang)
         self._lang_combo.setCurrentIndex(idx if idx >= 0 else 0)
@@ -830,11 +833,12 @@ class MainWindow(QMainWindow):
         self._model_label.setText(tr("Model:"))
         self._language_label.setText(tr("Language:"))
         prev_lang_data = self._lang_combo.currentData()
-        self._lang_combo.setItemText(0, tr("Auto-detect"))
-        self._lang_combo.setItemText(1, tr("Ukrainian"))
+        self._lang_combo.blockSignals(True)
+        self._fill_language_combo()
         idx = self._lang_combo.findData(prev_lang_data)
         if idx >= 0:
             self._lang_combo.setCurrentIndex(idx)
+        self._lang_combo.blockSignals(False)
         self._refresh_model_choices()
 
         self._diar_box.setTitle(tr("Speaker diarization"))
@@ -1541,6 +1545,17 @@ class MainWindow(QMainWindow):
     def _on_cancelled(self):
         self._reset_run_state()
         self._status_label.setText(tr("Cancelled."))
+
+    def _fill_language_combo(self):
+        """Auto-detect and Ukrainian first, then the languages Whisper handles
+        well, alphabetical in the interface language."""
+        self._lang_combo.clear()
+        self._lang_combo.addItem(tr("Auto-detect"), "auto")
+        self._lang_combo.addItem(tr("Ukrainian"), "uk")
+        collator = QCollator(QLocale(get_language()))
+        names = sorted(((tr(name), code) for code, name in _OTHER_LANGUAGES), key=lambda t: collator.sortKey(t[0]))
+        for text, code in names:
+            self._lang_combo.addItem(text, code)
 
     def _set_stage(self, text):
         """The elapsed time next to the stage text is what shows a long, silent
