@@ -71,8 +71,8 @@
   <text class="label-sm" x="240" y="284">конвертація у WAV 16 кГц моно</text>
 
   <rect class="box-accent" x="70" y="326" width="340" height="54" rx="9"/>
-  <text class="label"    x="240" y="350">faster-whisper</text>
-  <text class="label-sm" x="240" y="368">мовлення в текст (транскрипція)</text>
+  <text class="label"    x="240" y="350">faster-whisper / whisper.cpp</text>
+  <text class="label-sm" x="240" y="368">мовлення в текст (CPU, CUDA або Vulkan GPU)</text>
 
   <rect class="box-opt" x="70" y="410" width="340" height="54" rx="9"/>
   <text class="label"    x="240" y="434">pyannote</text>

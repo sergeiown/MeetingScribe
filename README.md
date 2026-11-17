@@ -55,8 +55,9 @@ falls back to a plain transcript with timestamps.
 - Known-speaker recognition against a local, versioned voiceprint database.
 - On-the-fly enrollment: name an unknown speaker and save their voiceprint
   (`Name (v1).npy`, `Name (v2).npy`, …), with overwrite / add-version / skip prompts.
-- No silent downloads - the app always asks before fetching a model, with the
-  recommended choice pre-checked.
+- Models are downloaded only on request: just the lightest recognition model
+  is installed automatically on first launch, everything else is a choice in
+  **Settings > Models**.
 - In-app updates: MeetingScribe checks for a newer version on launch and can
   download and install it with one confirmation, no browser required.
 - Light/dark theme (follows Windows automatically, or set manually) and an
@@ -98,10 +99,9 @@ you do not need to prepare any of it:
 2. It installs Python and ffmpeg via winget if either is missing, sets up a
    private environment for MeetingScribe (never your system Python), and
    launches the app.
-3. On first launch, the app installs its remaining dependencies (with a
-   progress window) and, if no recognition model is installed yet, asks
-   before downloading one - nothing happens silently, and the recommended
-   choice is pre-checked. A small demo recording (`samples/demo.wav`) is
+3. On first launch, the app installs its remaining dependencies and the
+   lightest recognition model (with a progress window); any other model is
+   downloaded only when you choose it in **Settings > Models**. A small demo recording (`samples/demo.wav`) is
    bundled so there's something to try right away, no recording of your own
    required.
 

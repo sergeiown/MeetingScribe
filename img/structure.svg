@@ -71,8 +71,8 @@
   <text class="label-sm" x="240" y="284">convert to 16 kHz mono WAV</text>
 
   <rect class="box-accent" x="70" y="326" width="340" height="54" rx="9"/>
-  <text class="label"    x="240" y="350">faster-whisper</text>
-  <text class="label-sm" x="240" y="368">speech to text (transcription)</text>
+  <text class="label"    x="240" y="350">faster-whisper / whisper.cpp</text>
+  <text class="label-sm" x="240" y="368">speech to text (CPU, CUDA or Vulkan GPU)</text>
 
   <rect class="box-opt" x="70" y="410" width="340" height="54" rx="9"/>
   <text class="label"    x="240" y="434">pyannote</text>
