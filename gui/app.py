@@ -68,6 +68,13 @@ def _set_windows_app_id():
         pass
 
 
+def _gpu_engine_ready() -> bool:
+    """True when recognition will run on the Vulkan engine and a GPU model is
+    already installed, so the CPU model isn't needed (and a deleted one stays deleted)."""
+    return (core.whisper_cpp.is_available() and bool(core.installed_gpu_whisper_sizes())
+            and core.choose_engine("auto") == "vulkan")
+
+
 def main():
     _set_windows_app_id()
     app = QApplication(sys.argv)
@@ -109,7 +116,7 @@ def main():
     # The mandatory model installs unconditionally like pip deps, no confirmation
     # dialog; both share one combined progress window rather than separate ones.
     model_to_bundle = None
-    if not core.installed_whisper_sizes():
+    if not core.installed_whisper_sizes() and not _gpu_engine_ready():
         model_to_bundle = next(s for s in core.WHISPER_MODELS if s.mandatory)
     gpu_model_key = ""
     if core.whisper_cpp.is_available():
