@@ -508,8 +508,9 @@ class _HotkeyCaptureDialog(QDialog):
 
 
 class GeneralTab(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, recording_active=False):
         super().__init__(parent)
+        self._recording_active = recording_active
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -592,6 +593,11 @@ class GeneralTab(QWidget):
         box = QGroupBox(tr("Recording"))
         box_layout = QVBoxLayout(box)
         box_layout.setSpacing(14)
+        if self._recording_active:
+            locked = QLabel(tr("A recording is in progress - these settings are locked until it stops."))
+            locked.setWordWrap(True)
+            locked.setProperty("hint", True)
+            box_layout.addWidget(locked)
 
         mic_block = QVBoxLayout()
         mic_block.setSpacing(8)
@@ -604,6 +610,7 @@ class GeneralTab(QWidget):
         self._mic_device_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._mic_device_combo.currentIndexChanged.connect(
             lambda _i: set_mic_device_name(self._mic_device_combo.currentData()))
+        self._mic_device_combo.setEnabled(not self._recording_active)
         mic_block.addWidget(self._mic_device_combo)
         box_layout.addLayout(mic_block)
 
@@ -618,6 +625,7 @@ class GeneralTab(QWidget):
         self._loopback_device_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._loopback_device_combo.currentIndexChanged.connect(
             lambda _i: set_loopback_device_name(self._loopback_device_combo.currentData()))
+        self._loopback_device_combo.setEnabled(not self._recording_active)
         loopback_block.addWidget(self._loopback_device_combo)
         box_layout.addLayout(loopback_block)
 
@@ -764,7 +772,7 @@ class GeneralTab(QWidget):
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, recording_active=False):
         super().__init__(parent)
         self.setWindowTitle(tr("Settings"))
         # Never taller than the main window itself - each tab that might
@@ -774,7 +782,7 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
 
         tabs = QTabWidget()
-        self.general_tab = GeneralTab()
+        self.general_tab = GeneralTab(recording_active=recording_active)
         self.models_tab = ModelsTab()
         self.speakers_tab = SpeakersTab()
         tabs.addTab(self.general_tab, tr("General"))

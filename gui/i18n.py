@@ -184,6 +184,7 @@ _UK = {
     # widgets.py (ModelRowWidget)
     "Installed": "Встановлено",
     "Delete": "Видалити",
+    "A recording is in progress - these settings are locked until it stops.": "Триває запис - ці налаштування заблоковані, поки він не завершиться.",
     "Recommended": "Рекомендовано",
     "Best accuracy, slowest - for when quality matters more than speed.": "Найвища точність, найповільніша - коли якість важливіша за швидкість.",
     "Nearly large-v3's accuracy at a fraction of the time - a good default.": "Майже точність large-v3 за частку часу - добрий варіант за замовчуванням.",

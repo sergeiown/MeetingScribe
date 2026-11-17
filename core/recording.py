@@ -125,6 +125,16 @@ def _classify_open_error(e: Exception) -> str:
     return f"Could not open this device: {e}"
 
 
+_active_recordings = 0
+_active_lock = threading.Lock()
+
+
+def _count_active(delta: int) -> None:
+    global _active_recordings
+    with _active_lock:
+        _active_recordings = max(0, _active_recordings + delta)
+
+
 def list_microphones() -> list:
     """WASAPI-capable input devices."""
     import sounddevice as sd
@@ -134,8 +144,11 @@ def list_microphones() -> list:
     # here until this) - forcing a re-init makes it re-enumerate, which is
     # the only way a long-running app process picks up e.g. a Bluetooth
     # headset connected (or made the Windows default) after it started.
-    sd._terminate()
-    sd._initialize()
+    # Never while a recording is running: re-initializing PortAudio tears
+    # down every open stream, which silently ended the recording.
+    if _active_recordings == 0:
+        sd._terminate()
+        sd._initialize()
     hostapis = sd.query_hostapis()
     wasapi_idx = next((i for i, a in enumerate(hostapis) if "WASAPI" in a["name"]), None)
     if wasapi_idx is None:
@@ -472,6 +485,8 @@ class Recorder:
         self._stop_flag.clear()
         self._mix_thread = threading.Thread(target=self._mix_loop, daemon=True)
         self._mix_thread.start()
+        self._counted = True
+        _count_active(+1)
 
     def _mix_loop(self):
         while not self._stop_flag.is_set():
@@ -542,6 +557,9 @@ class Recorder:
         for src in self._sources:
             src.stop()
         self._sources = []
+        if getattr(self, "_counted", False):
+            self._counted = False
+            _count_active(-1)
 
         for f in self._raw_files:
             try:

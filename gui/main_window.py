@@ -1056,7 +1056,7 @@ class MainWindow(QMainWindow):
         # keystroke - confirmed by direct testing that this is exactly why
         # re-entering the already-saved combination looked unresponsive.
         self._hotkey_manager.unregister()
-        SettingsDialog(self).exec()
+        SettingsDialog(self, recording_active=self._recording_controller is not None).exec()
         if get_language() != prev_lang:
             self.retranslate_ui()
         else:
