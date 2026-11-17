@@ -93,6 +93,11 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(_MIN_WIDTH, _MIN_HEIGHT)
 
         self._worker = None
+        self._stage_text = ""
+        self._stage_start = time.time()
+        self._stage_timer = QTimer(self)
+        self._stage_timer.setInterval(1000)
+        self._stage_timer.timeout.connect(self._tick_stage)
         self._progress_phase = None
         self._progress_phase_start = None
         self._current_file_index = 0
@@ -628,6 +633,9 @@ class MainWindow(QMainWindow):
         self._delete_btn = QPushButton(tr("Delete selected"))
         self._delete_btn.setProperty("compact", True)
         self._delete_btn.clicked.connect(self._on_delete_files)
+        self._open_input_btn = QPushButton(tr("Open recordings folder"))
+        self._open_input_btn.setProperty("compact", True)
+        self._open_input_btn.clicked.connect(self._on_open_input_folder)
         self._play_btn = QPushButton(tr("Play"))
         self._play_btn.setProperty("compact", True)
         self._play_btn.clicked.connect(self._on_play_clicked)
@@ -636,6 +644,7 @@ class MainWindow(QMainWindow):
         file_btn_row.addWidget(self._rename_btn)
         file_btn_row.addWidget(self._delete_btn)
         file_btn_row.addWidget(self._play_btn)
+        file_btn_row.addWidget(self._open_input_btn)
         file_btn_row.addStretch()
         files_layout.addLayout(file_btn_row)
 
@@ -808,6 +817,7 @@ class MainWindow(QMainWindow):
         self._add_btn.setText(tr("Add files..."))
         self._rename_btn.setText(tr("Rename"))
         self._delete_btn.setText(tr("Delete selected"))
+        self._open_input_btn.setText(tr("Open recordings folder"))
         self._play_btn.setText(
             tr("Pause") if self._media_player.playbackState() == QMediaPlayer.PlayingState else tr("Play"))
         self._transcript_box.setTitle(tr("Transcript"))
@@ -1042,6 +1052,10 @@ class MainWindow(QMainWindow):
             added = True
         if added:
             self._refresh_file_list()
+
+    def _on_open_input_folder(self):
+        core.INPUT_DIR.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(core.INPUT_DIR)))
 
     def _on_open_output_folder(self):
         core.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -1349,7 +1363,8 @@ class MainWindow(QMainWindow):
         # Indeterminate (busy) until the first real progress update arrives -
         # a large model can take a long time to load, with no progress
         # events during that stretch, so a static "0%" bar reads as frozen.
-        self._status_label.setText(tr("Starting..."))
+        self._set_stage(tr("Starting..."))
+        self._stage_timer.start()
         self._progress_bar.setRange(0, 0)
         self._progress_bar.setFormat("")
         self._overall_progress_bar.setRange(0, file_count)
@@ -1440,8 +1455,9 @@ class MainWindow(QMainWindow):
         # Also echoed into the transcript pane - model loading in particular
         # can take a noticeable while before the first real segment of text
         # arrives, and this is what keeps that stretch from looking frozen.
-        text = tr(msg)
-        self._status_label.setText(text)
+        base, bracket, device = msg.partition(" [")
+        text = tr(base) + (bracket + device if bracket else "")
+        self._set_stage(text)
         self._transcript_view.append(text)
 
     def _on_progress(self, phase, current, total, label):
@@ -1526,7 +1542,20 @@ class MainWindow(QMainWindow):
         self._reset_run_state()
         self._status_label.setText(tr("Cancelled."))
 
+    def _set_stage(self, text):
+        """The elapsed time next to the stage text is what shows a long, silent
+        stage (loading a model, detecting speech) is still moving."""
+        self._stage_text = text
+        self._stage_start = time.time()
+        self._tick_stage()
+
+    def _tick_stage(self):
+        secs = int(time.time() - self._stage_start)
+        self._status_label.setText(f"{self._stage_text}  ·  {secs // 60:02d}:{secs % 60:02d}")
+
     def _reset_run_state(self):
+        self._stage_timer.stop()
+        self._status_label.setText(self._stage_text)
         core.set_sleep_prevention(False)
         self._transcribe_btn.setEnabled(True)
         self._cancel_btn.setEnabled(False)

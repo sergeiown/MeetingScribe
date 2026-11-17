@@ -184,6 +184,10 @@ _UK = {
     # widgets.py (ModelRowWidget)
     "Installed": "Встановлено",
     "Delete": "Видалити",
+    "Starting recognition engine...": "Запуск рушія розпізнавання...",
+    "Loading GPU model...": "Завантаження моделі на GPU...",
+    "Detecting speech...": "Пошук мовлення...",
+    "Open recordings folder": "Відкрити теку записів",
     "A recording is in progress - these settings are locked until it stops.": "Триває запис - ці налаштування заблоковані, поки він не завершиться.",
     "Recommended": "Рекомендовано",
     "Best accuracy, slowest - for when quality matters more than speed.": "Найвища точність, найповільніша - коли якість важливіша за швидкість.",

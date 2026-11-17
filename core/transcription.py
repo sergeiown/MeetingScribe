@@ -95,9 +95,9 @@ def _transcribe_vulkan(file_path, model_size, language, total_dur, models_dir, c
     try:
         dur = total_dur if (total_dur and total_dur > 0) else get_duration(wav)
         if on_status:
-            on_status("Transcribing...")
+            on_status("Loading GPU model...")
         segments, lang, prob = whisper_cpp.transcribe(
-            wav, model_path, language, dur, models_dir, cancel_token, on_progress)
+            wav, model_path, language, dur, models_dir, cancel_token, on_progress, on_status)
         if on_progress:
             on_progress(dur, dur, "")
         _log.info("Transcription (Vulkan): lang=%s segments=%d", lang, len(segments))

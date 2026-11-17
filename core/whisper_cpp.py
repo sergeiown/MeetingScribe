@@ -166,7 +166,8 @@ def _seconds(h: str, m: str, s: str) -> float:
 
 def transcribe(wav_path: str, model_path: Path, language: Optional[str], total_dur: float,
                models_dir: Path, cancel_token: CancelToken,
-               on_progress: Optional[Callable[[float, float, str], None]] = None):
+               on_progress: Optional[Callable[[float, float, str], None]] = None,
+               on_status: Optional[Callable[[str], None]] = None):
     """-> (segments, detected_language, language_probability). Raises
     EngineError if the engine fails; Cancelled if cancelled (child is killed)."""
     cmd = [str(ENGINE_EXE), "-m", str(model_path), "-f", str(wav_path),
@@ -198,9 +199,21 @@ def transcribe(wav_path: str, model_path: Path, language: Optional[str], total_d
             m = _DETECTED.search(line)
             if m and not language:
                 state["lang"], state["prob"] = m.group(1), float(m.group(2))
+            if on_status:
+                if "VAD is enabled" in line and not state.get("vad"):
+                    state["vad"] = True
+                    on_status("Detecting speech...")
+                speech_search_done = "Reduced audio" in line or ("main: processing" in line and vad is None)
+                if speech_search_done and not state.get("started"):
+                    state["started"] = True
+                    on_status("Transcribing...")
             m = _PROGRESS.search(line)
-            if m and on_progress and total_dur:
-                on_progress(total_dur * int(m.group(1)) / 100.0, total_dur, "")
+            if m:
+                if on_status and not state.get("started"):
+                    state["started"] = True
+                    on_status("Transcribing...")
+                if on_progress and total_dur:
+                    on_progress(total_dur * int(m.group(1)) / 100.0, total_dur, "")
 
     threads = [threading.Thread(target=read_out, daemon=True), threading.Thread(target=read_err, daemon=True)]
     for t in threads:

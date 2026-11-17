@@ -6,6 +6,7 @@ each transcription. MPLBACKEND=Agg doesn't reliably fix it - a process that
 never imports PySide6 avoids the conflict entirely."""
 
 import shutil
+import threading
 
 from .decision_request import SpeakerDecisionRequest
 
@@ -39,11 +40,14 @@ def run_transcription_process(files, model_size, language, auto_diarize, hf_toke
     Saves the transcript + segments sidecar first; only continues into
     diarization if auto_diarize and a token are present, otherwise the file
     stays eligible for a later run_diarize_process pass."""
+    progress_q.put(("status", "Starting recognition engine..."))
     import core
 
     # Spawned process = fresh interpreter; needs its own init_logger() or nothing reaches logs/session.log.
     core.init_logger()
-    core.log_ml_versions()
+    # Importing the whole ML stack just to log versions took ~10 s, all of it
+    # before the user saw anything - so it runs alongside the real work instead.
+    threading.Thread(target=core.log_ml_versions, daemon=True).start()
 
     cancel_token = ProcessCancelToken(cancel_event)
 
@@ -119,7 +123,7 @@ def run_diarize_process(files, hf_token, num_speakers, device_preference, progre
     import core
 
     core.init_logger()
-    core.log_ml_versions()
+    threading.Thread(target=core.log_ml_versions, daemon=True).start()
     cancel_token = ProcessCancelToken(cancel_event)
 
     def on_status(msg):
