@@ -559,6 +559,8 @@ class GeneralTab(QWidget):
         box_layout.setSpacing(10)
 
         cpu_name, gpu_name, gpu_supported = core.detect_hardware_info()
+        vulkan_supported = (not gpu_supported and core.whisper_cpp.is_available()
+                            and core.whisper_cpp.gpu_is_usable(gpu_name))
 
         cpu_row = QHBoxLayout()
         cpu_icon = QLabel()
@@ -575,8 +577,12 @@ class GeneralTab(QWidget):
             gpu_icon.setPixmap(QPixmap(str(gpu_icon_path(gpu_name))).scaled(
                 16, 16, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             gpu_row.addWidget(gpu_icon)
-            gpu_label_text = (tr("GPU: {name}", name=gpu_name) if gpu_supported
-                              else tr("GPU: {name} (not supported for acceleration)", name=gpu_name))
+            if gpu_supported:
+                gpu_label_text = tr("GPU: {name}", name=gpu_name)
+            elif vulkan_supported:
+                gpu_label_text = tr("GPU: {name} (acceleration via Vulkan)", name=gpu_name)
+            else:
+                gpu_label_text = tr("GPU: {name} (not supported for acceleration)", name=gpu_name)
             gpu_row.addWidget(QLabel(gpu_label_text))
             gpu_row.addStretch()
             box_layout.addLayout(gpu_row)
@@ -628,6 +634,12 @@ class GeneralTab(QWidget):
                 "identification, especially with larger models. CPU works "
                 "everywhere and leaves the GPU free for other tasks (e.g. "
                 "gaming) while processing.")
+        elif vulkan_supported:
+            explanation_text = tr(
+                "This GPU is used through Vulkan for speech recognition "
+                "(speaker identification still runs on the CPU). The first "
+                "run downloads a separate GPU model. If it fails, the app "
+                "falls back to the CPU automatically.")
         elif gpu_name:
             explanation_text = tr(
                 "This GPU isn't supported for acceleration here (NVIDIA/CUDA "

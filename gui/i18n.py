@@ -221,6 +221,8 @@ _UK = {
     "CPU threads for speech recognition:": "Потоки процесора для розпізнавання:",
     "Automatic": "Автоматично",
     "Speech recognition engine:": "Двигун розпізнавання:",
+    "GPU: {name} (acceleration via Vulkan)": "GPU: {name} (прискорення через Vulkan)",
+    "This GPU is used through Vulkan for speech recognition (speaker identification still runs on the CPU). The first run downloads a separate GPU model. If it fails, the app falls back to the CPU automatically.": "Цей GPU використовується через Vulkan для розпізнавання мовлення (визначення спікерів, як і раніше, на процесорі). Під час першого запуску завантажується окрема модель для GPU. Якщо щось піде не так, застосунок автоматично перейде на процесор.",
     "Automatic (GPU if supported)": "Автоматично (GPU, якщо підтримується)",
     "GPU via Vulkan (AMD / Intel)": "GPU через Vulkan (AMD / Intel)",
     "CPU / NVIDIA (faster-whisper)": "Процесор / NVIDIA (faster-whisper)",
