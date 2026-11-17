@@ -5,7 +5,7 @@ from pathlib import Path
 
 import core
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, QThread
 from PySide6.QtGui import QPixmap, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
@@ -29,7 +29,7 @@ from .style import (
     get_minimize_to_tray_preference, set_minimize_to_tray_preference,
 )
 from .widgets import ModelRowWidget, fit_action_button_width
-from .workers import ModelDownloadProcessWorker
+from .workers import ModelDownloadProcessWorker, ModelDownloadWorker
 
 _PYANNOTE_NOTE = (
     "Gated models - accept the license while logged in to Hugging Face:<br>"
@@ -37,6 +37,32 @@ _PYANNOTE_NOTE = (
     '<a href="https://hf.co/pyannote/segmentation-3.0">segmentation-3.0</a>, '
     '<a href="https://hf.co/pyannote/embedding">embedding</a>'
 )
+
+
+class _GpuDownloadHandle(QObject):
+    """Lives in the GUI thread so the download worker's signals reach the row
+    through queued connections (a plain function would run in the worker's thread)."""
+
+    def __init__(self, key, row, thread, parent):
+        super().__init__(parent)
+        self._key = key
+        self._row = row
+        self._thread = thread
+        self.cleanup = lambda: None
+
+    def on_progress(self, current, total, label):
+        self._row.set_downloading(current, total, label)
+
+    def on_finished(self):
+        self._thread.quit()
+        self._row.set_installed(core.whisper_cpp.is_model_installed(self._key, core.MODELS_DIR))
+
+    def on_failed(self, error):
+        self._thread.quit()
+        self._row.set_done(False, error)
+
+    def on_thread_finished(self):
+        self.cleanup()
 
 
 class ModelsTab(QWidget):
@@ -68,6 +94,27 @@ class ModelsTab(QWidget):
             rec_layout.addWidget(row)
             self._rows[spec.key] = (row, spec)
         layout.addWidget(rec_box)
+
+        self._gpu_rows = {}
+        self._gpu_downloads = []  # (thread, worker) while running
+        if core.whisper_cpp.is_available():
+            gpu_box = QGroupBox(tr("Recognition on GPU (Vulkan)"))
+            gpu_layout = QVBoxLayout(gpu_box)
+            gpu_layout.setSpacing(10)
+            note = QLabel(tr(
+                "Separate models for GPU recognition (AMD / Intel via Vulkan). "
+                "Without one, recognition runs on the CPU."))
+            note.setWordWrap(True)
+            note.setProperty("hint", True)
+            gpu_layout.addWidget(note)
+            for spec in core.WHISPER_MODELS:
+                row = ModelRowWidget(spec.label, core.whisper_cpp.GGML_SIZES.get(spec.key, ""),
+                                     spec.description, core.whisper_cpp.is_model_installed(spec.key, core.MODELS_DIR))
+                row.download_requested.connect(lambda s=spec: self._start_gpu_download(s))
+                row.delete_requested.connect(lambda s=spec: self._delete_gpu_model(s))
+                gpu_layout.addWidget(row)
+                self._gpu_rows[spec.key] = row
+            layout.addWidget(gpu_box)
 
         diar_box = QGroupBox(tr("Diarization (pyannote)"))
         diar_layout = QVBoxLayout(diar_box)
@@ -149,6 +196,39 @@ class ModelsTab(QWidget):
         worker = ModelDownloadProcessWorker("whisper", (spec.key, spec.hf_repo), core.read_hf_token())
         self._run_download(row, worker, lambda spec=spec: core.is_whisper_installed(spec.key))
 
+    def _start_gpu_download(self, spec):
+        row = self._gpu_rows[spec.key]
+
+        def download(token, on_progress):
+            core.whisper_cpp.ensure_vad(core.MODELS_DIR, token)
+            core.whisper_cpp.ensure_model(spec.key, core.MODELS_DIR, token,
+                                          lambda done, total: on_progress(done, total, ""))
+
+        worker = ModelDownloadWorker(download)
+        thread = QThread(self)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        handle = _GpuDownloadHandle(spec.key, row, thread, self)
+        worker.progress.connect(handle.on_progress)
+        worker.finished.connect(handle.on_finished)
+        worker.failed.connect(handle.on_failed)
+        row.cancel_requested.connect(lambda w=worker: w.cancel())
+        entry = (thread, worker)
+        thread.finished.connect(handle.on_thread_finished)
+        handle.cleanup = lambda: self._gpu_downloads.remove(entry) if entry in self._gpu_downloads else None
+        self._gpu_downloads.append(entry)
+        row.set_downloading(0, 0)
+        thread.start()
+
+    def _delete_gpu_model(self, spec):
+        if QMessageBox.question(
+                self, tr("Delete model"),
+                tr('Delete the "{name}" model ({size})? You can download it again anytime.',
+                   name=spec.label, size=core.whisper_cpp.GGML_SIZES.get(spec.key, ""))) != QMessageBox.Yes:
+            return
+        core.whisper_cpp.delete_model(spec.key, core.MODELS_DIR)
+        self._gpu_rows[spec.key].set_installed(False)
+
     def _start_diarization_download(self):
         worker = ModelDownloadProcessWorker("diarization", (), core.read_hf_token())
         self._run_download(self._diarization_row, worker, core.is_diarization_complete)
@@ -203,6 +283,10 @@ class ModelsTab(QWidget):
         the background."""
         for worker in list(self._active_downloads):
             worker.cancel()
+        for thread, worker in list(self._gpu_downloads):
+            worker.cancel()
+            thread.quit()
+            thread.wait(3000)
 
 
 class SpeakersTab(QWidget):

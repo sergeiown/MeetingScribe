@@ -26,6 +26,8 @@ _VAD_URL = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero
 _VAD_FILE = "ggml-silero-v5.1.2.bin"
 _MIN_MODEL_BYTES = 10 * 1024 * 1024
 
+GGML_SIZES = {"large-v3": "~3.1 GB", "large-v3-turbo": "~1.6 GB", "small": "~490 MB"}
+
 _GPU_VENDORS = re.compile(r"amd|radeon|intel|arc\b", re.IGNORECASE)
 _SEGMENT = re.compile(r"^\[(\d+):(\d+):(\d+(?:\.\d+)?) --> (\d+):(\d+):(\d+(?:\.\d+)?)\]\s*(.*)$")
 _PROGRESS = re.compile(r"progress\s*=\s*(\d+)%")
@@ -62,10 +64,12 @@ def is_model_installed(size: str, models_dir: Path = MODELS_DIR) -> bool:
 
 
 def delete_model(size: str, models_dir: Path = MODELS_DIR) -> None:
-    try:
-        ggml_model_path(size, models_dir).unlink()
-    except OSError:
-        pass
+    path = ggml_model_path(size, models_dir)
+    for p in (path, path.with_name(path.name + ".part")):
+        try:
+            p.unlink()
+        except OSError:
+            pass
 
 
 def _download(url: str, dest: Path, cancel_token: CancelToken,
@@ -104,7 +108,7 @@ def ensure_model(size: str, models_dir: Path, cancel_token: CancelToken,
     return path
 
 
-def _ensure_vad(models_dir: Path, cancel_token: CancelToken) -> Optional[Path]:
+def ensure_vad(models_dir: Path, cancel_token: CancelToken) -> Optional[Path]:
     path = ggml_dir(models_dir) / _VAD_FILE
     if path.exists() and path.stat().st_size > 100 * 1024:
         return path
@@ -129,7 +133,7 @@ def transcribe(wav_path: str, model_path: Path, language: Optional[str], total_d
     EngineError if the engine fails; Cancelled if cancelled (child is killed)."""
     cmd = [str(ENGINE_EXE), "-m", str(model_path), "-f", str(wav_path),
            "-l", language or "auto", "-pp"]
-    vad = _ensure_vad(models_dir, cancel_token)
+    vad = ensure_vad(models_dir, cancel_token)
     if vad is not None:
         cmd += ["--vad", "-vm", str(vad)]
 

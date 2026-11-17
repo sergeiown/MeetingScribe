@@ -77,14 +77,7 @@ def _assemble_text(segments) -> str:
 
 def _transcribe_vulkan(file_path, model_size, language, total_dur, models_dir, cancel_token,
                        on_status, on_progress) -> TranscribeResult:
-    def download_progress(done, total):
-        if on_status:
-            on_status(f"Downloading GPU model {model_size}: {done * 100 // total}% "
-                      f"({done // (1 << 20)} of {total // (1 << 20)} MB)")
-
-    if on_status and not whisper_cpp.is_model_installed(model_size, models_dir):
-        on_status(f"Downloading GPU model {model_size}...")
-    model_path = whisper_cpp.ensure_model(model_size, models_dir, cancel_token, download_progress)
+    model_path = whisper_cpp.ggml_model_path(model_size, models_dir)
     gpu_name = detect_hardware_info()[1] or "GPU"
     if on_status:
         on_status(f"Converting to WAV... [{gpu_name}]")
@@ -115,7 +108,13 @@ def transcribe_file(file_path: Path, model_size: str, language: Optional[str], t
                      on_progress: Optional[ProgressFn] = None) -> TranscribeResult:
     cancel_token = cancel_token or CancelToken()
 
-    if choose_engine(device_preference) == "vulkan":
+    engine = choose_engine(device_preference)
+    if engine == "vulkan" and not whisper_cpp.is_model_installed(model_size, models_dir):
+        _log.info("GPU model %s not downloaded, using faster-whisper", model_size)
+        if on_status:
+            on_status("GPU model not downloaded (Settings > Models), using the CPU...")
+        engine = "faster-whisper"
+    if engine == "vulkan":
         try:
             return _transcribe_vulkan(file_path, model_size, language, total_dur, models_dir,
                                       cancel_token, on_status, on_progress)
