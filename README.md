@@ -51,7 +51,9 @@ falls back to a plain transcript with timestamps.
 - Speaker diarization (who spoke when) via pyannote `speaker-diarization-3.1`.
 - Recognition and speaker identification are separate steps: run both at once,
   or identify speakers later for an already-recognized file, without
-  re-running speech recognition.
+  re-running speech recognition. On a GPU, speaker identification runs in
+  parallel with recognition, so a long recording takes about as long as the
+  slower of the two steps instead of their sum.
 - Known-speaker recognition against a local, versioned voiceprint database.
 - On-the-fly enrollment: name an unknown speaker and save their voiceprint
   (`Name (v1).npy`, `Name (v2).npy`, …), with overwrite / add-version / skip prompts.
@@ -62,9 +64,14 @@ falls back to a plain transcript with timestamps.
   download and install it with one confirmation, no browser required.
 - Light/dark theme (follows Windows automatically, or set manually) and an
   English/Ukrainian interface language switch.
-- Automatic language detection, optimized for Ukrainian (other languages are
-  supported via Whisper's multilingual model).
-- CPU, NVIDIA CUDA, or AMD/Intel GPU through Vulkan, auto-detected.
+- Automatic language detection, optimized for Ukrainian, plus a list of other
+  well-supported languages to pick from (any other language works through
+  Whisper's multilingual model and automatic detection).
+- CPU, NVIDIA CUDA, or AMD/Intel GPU through Vulkan, auto-detected; the engine
+  and the number of CPU threads can also be chosen in **Settings**.
+- Recognition cannot be started while a recording is in progress, and
+  starting a recording during a run warns you when little memory is free.
+- A button to open the recordings folder straight from the file list.
 - Skips files already transcribed in `output/` (asks before overwriting), so
   re-running a batch does not redo finished work.
 - Plain-text output, easy to read and diff.
