@@ -249,7 +249,15 @@ class ModelRowWidget(QFrame):
         outer.setSpacing(4)
 
         top_row = QHBoxLayout()
-        top_row.addWidget(QLabel(label + (tr("  [recommended]") if recommended else "")), stretch=1)
+        name_box = QHBoxLayout()
+        name_box.addWidget(QLabel(label))
+        if recommended:
+            self.setProperty("recommended", True)
+            badge = QLabel(tr("Recommended"))
+            badge.setObjectName("recommendedBadge")
+            name_box.addWidget(badge)
+        name_box.addStretch()
+        top_row.addLayout(name_box, stretch=1)
 
         size_label = QLabel(size)
         size_label.setProperty("hint", True)

@@ -38,9 +38,6 @@ class RoundedProgressBar(QProgressBar):
             self.update()
 
     def paintEvent(self, event):
-        if not self._busy():
-            super().paintEvent(event)
-            return
         c = current_colors()
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
@@ -51,11 +48,34 @@ class RoundedProgressBar(QProgressBar):
         p.drawRoundedRect(outer, radius, radius)
 
         inner = outer.adjusted(1.5, 1.5, -1.5, -1.5)
-        pill_w = max(inner.height(), inner.width() * _PILL_FRACTION)
-        phase = (time.monotonic() % _PERIOD_S) / _PERIOD_S
-        eased = (1 - math.cos(2 * math.pi * phase)) / 2
-        x = inner.left() + (inner.width() - pill_w) * eased
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(c["accent"]))
-        p.drawRoundedRect(QRectF(x, inner.top(), pill_w, inner.height()), inner.height() / 2, inner.height() / 2)
+        if self._busy():
+            pill_w = max(inner.height(), inner.width() * _PILL_FRACTION)
+            phase = (time.monotonic() % _PERIOD_S) / _PERIOD_S
+            eased = (1 - math.cos(2 * math.pi * phase)) / 2
+            x = inner.left() + (inner.width() - pill_w) * eased
+            p.drawRoundedRect(QRectF(x, inner.top(), pill_w, inner.height()), inner.height() / 2, inner.height() / 2)
+        else:
+            span = self.maximum() - self.minimum()
+            fraction = (self.value() - self.minimum()) / span if span > 0 else 0.0
+            fraction = min(max(fraction, 0.0), 1.0)
+            fill_right = inner.left()
+            if fraction > 0:
+                width = max(inner.height(), inner.width() * fraction)
+                fill_right = inner.left() + width
+                p.drawRoundedRect(QRectF(inner.left(), inner.top(), width, inner.height()),
+                                  inner.height() / 2, inner.height() / 2)
+            if self.isTextVisible() and self.text():
+                rect = QRectF(self.rect())
+                p.save()
+                p.setClipRect(QRectF(rect.left(), rect.top(), fill_right - rect.left(), rect.height()))
+                p.setPen(QColor(c["accent_text"]))
+                p.drawText(rect, Qt.AlignCenter, self.text())
+                p.restore()
+                p.save()
+                p.setClipRect(QRectF(fill_right, rect.top(), rect.right() - fill_right, rect.height()))
+                p.setPen(QColor(c["text"]))
+                p.drawText(rect, Qt.AlignCenter, self.text())
+                p.restore()
         p.end()

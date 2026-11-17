@@ -156,6 +156,15 @@ QFrame#modelRow {{
     border: 1px solid {c['border']};
     border-radius: 6px;
 }}
+QFrame#modelRow[recommended="true"] {{
+    border: 1px solid {c['accent']};
+}}
+QLabel#recommendedBadge {{
+    color: {c['accent']};
+    font-weight: 600;
+    background: transparent;
+    border: none;
+}}
 
 QPushButton {{
     background: {c['btn_bg']};
