@@ -899,12 +899,17 @@ class MainWindow(QMainWindow):
 
     def _refresh_model_choices(self):
         self._model_combo.clear()
-        installed = core.installed_whisper_sizes()
         # Torch-free: never import torch in the main GUI process (see
         # core.has_diarization_support). Only used to pick heaviest-vs-lightest;
         # the real device is decided inside the isolated ML pipeline process.
-        use_gpu = core.nvidia_gpu_present() and get_device_preference() != "cpu"
-        device = "cuda" if use_gpu else "cpu"
+        gpu_models = (core.installed_gpu_whisper_sizes()
+                      if core.choose_engine(get_device_preference()) == "vulkan" else [])
+        if gpu_models:
+            installed, device = gpu_models, "cuda"
+        else:
+            installed = core.installed_whisper_sizes()
+            use_gpu = core.nvidia_gpu_present() and get_device_preference() != "cpu"
+            device = "cuda" if use_gpu else "cpu"
         recommended = core.recommend_whisper_model(installed, device)
         for spec in core.WHISPER_MODELS:  # heaviest-first catalog order
             if spec.key in installed:

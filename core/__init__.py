@@ -46,7 +46,7 @@ from .speakers import (
 from .models_catalog import (
     ModelSpec, WHISPER_MODELS, PYANNOTE_MODELS,
     DIARIZATION_BUNDLE_LABEL, DIARIZATION_BUNDLE_SIZE, DIARIZATION_BUNDLE_DESCRIPTION,
-    installed_whisper_sizes, is_whisper_installed, is_pyannote_installed, is_diarization_complete,
+    installed_whisper_sizes, installed_gpu_whisper_sizes, is_whisper_installed, is_pyannote_installed, is_diarization_complete,
     recommend_whisper_model, download_whisper_model, download_pyannote_model,
     download_diarization_models, whisper_model_bytes,
     delete_whisper_model, delete_diarization_models,
@@ -83,7 +83,7 @@ __all__ = [
     "export_speakers", "import_speakers", "find_import_conflicts",
     "ModelSpec", "WHISPER_MODELS", "PYANNOTE_MODELS",
     "DIARIZATION_BUNDLE_LABEL", "DIARIZATION_BUNDLE_SIZE", "DIARIZATION_BUNDLE_DESCRIPTION",
-    "installed_whisper_sizes", "is_whisper_installed", "is_pyannote_installed", "is_diarization_complete",
+    "installed_whisper_sizes", "installed_gpu_whisper_sizes", "is_whisper_installed", "is_pyannote_installed", "is_diarization_complete",
     "recommend_whisper_model", "download_whisper_model", "download_pyannote_model",
     "download_diarization_models", "whisper_model_bytes",
     "delete_whisper_model", "delete_diarization_models",

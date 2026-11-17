@@ -85,6 +85,12 @@ def is_diarization_complete(models_dir: Path = MODELS_DIR) -> bool:
     return all(is_pyannote_installed(spec.key, models_dir) for spec in PYANNOTE_MODELS)
 
 
+def installed_gpu_whisper_sizes(models_dir: Path = MODELS_DIR) -> list:
+    """Catalog keys that also exist as whisper.cpp (ggml) models, for the Vulkan engine."""
+    from . import whisper_cpp
+    return [spec.key for spec in WHISPER_MODELS if whisper_cpp.is_model_installed(spec.key, models_dir)]
+
+
 def installed_whisper_sizes(models_dir: Path = MODELS_DIR) -> list:
     return [spec.key for spec in WHISPER_MODELS if is_whisper_installed(spec.key, models_dir)]
 
