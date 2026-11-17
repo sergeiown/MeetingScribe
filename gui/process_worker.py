@@ -108,6 +108,11 @@ def run_transcription_process(files, model_size, language, auto_diarize, hf_toke
                                                       decide)
                         diarized = True
                     except core.Cancelled:
+                        # Recognition already finished: keep it, so the file shows as
+                        # transcribed (and can be diarized later) instead of losing it.
+                        out = core.save_result(f, result.text)
+                        core.save_segments(f, result.segments, diarized=False)
+                        progress_q.put(("file_done", f.name, str(out)))
                         raise
                     except Exception as de:
                         diar_error_msg = _diarization_error_message(de)

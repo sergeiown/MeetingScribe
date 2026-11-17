@@ -1512,6 +1512,19 @@ class MainWindow(QMainWindow):
         self._show_saved_transcript(out_path)
         self._current_file_body_pos = None
         self._transcript_view.append(tr("Saved: {path}", path=out_path))
+        self._refresh_file_list_keeping_selection()
+
+    def _refresh_file_list_keeping_selection(self):
+        """Updates the status column as soon as a file's result is saved, instead of
+        only when the whole run ends."""
+        selected = set(self._selected_files())
+        self._refresh_file_list(select_all=False)
+        selection = self._file_table.selectionModel()
+        for row in range(self._file_table.rowCount()):
+            item = self._file_table.item(row, 0)
+            if item is not None and item.data(Qt.UserRole) in selected:
+                selection.select(self._file_table.model().index(row, 0),
+                                 selection.SelectionFlag.Select | selection.SelectionFlag.Rows)
 
     def _show_saved_transcript(self, out_path):
         if self._current_file_body_pos is None:
@@ -1545,6 +1558,7 @@ class MainWindow(QMainWindow):
     def _on_cancelled(self):
         self._reset_run_state()
         self._status_label.setText(tr("Cancelled."))
+        self._refresh_file_list_keeping_selection()
 
     def _fill_language_combo(self):
         """Auto-detect and Ukrainian first, then the languages Whisper handles
