@@ -151,6 +151,7 @@ class MainWindow(QMainWindow):
         self._media_player.sourceChanged.connect(lambda _url: self._refresh_playback_slider())
 
         self._build_ui()
+        self._fit_minimum_width()
         self._apply_initial_geometry()
         self._refresh_file_list(select_all=False)
 
@@ -178,10 +179,18 @@ class MainWindow(QMainWindow):
         can exceed it on scaled displays) and centers it."""
         screen = self.screen() or QApplication.primaryScreen()
         avail = screen.availableGeometry()
-        width = max(_MIN_WIDTH, min(_PREFERRED_WIDTH, int(avail.width() * 0.9)))
+        width = max(self.minimumWidth(), min(_PREFERRED_WIDTH, int(avail.width() * 0.9)))
         height = max(_MIN_HEIGHT, min(_PREFERRED_HEIGHT, int(avail.height() * 0.9)))
         self.resize(width, height)
         self.move(avail.center().x() - width // 2, avail.center().y() - height // 2)
+
+    def _fit_minimum_width(self):
+        """An explicit setMinimumSize overrides the layout's own minimum, so
+        long translations or a large display scale would squeeze the controls;
+        the window's minimum width follows the content instead."""
+        central = self.centralWidget()
+        content = central.minimumSizeHint().width() if central is not None else 0
+        self.setMinimumSize(max(_MIN_WIDTH, content), _MIN_HEIGHT)
 
     def _build_ui(self):
         # A plain sized-to-content button row instead of QMainWindow's own
@@ -782,6 +791,7 @@ class MainWindow(QMainWindow):
     def retranslate_ui(self):
         """Re-applies static text after a language change; content already
         written into the transcript view is left as-is."""
+        QTimer.singleShot(0, self._fit_minimum_width)
         self._settings_btn.setText(tr("Settings"))
         self._help_btn.setText(tr("Help"))
         self._how_to_use_action.setText(tr("How to use"))

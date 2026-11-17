@@ -111,11 +111,17 @@ class _ElidedLabel(QLabel):
         self._full_text = text
         self._update_elided()
 
+    def _horizontal_extra(self):
+        m = self.contentsMargins()
+        return m.left() + m.right() + 2 * self.frameWidth() + 2 * self.margin()
+
     def sizeHint(self):
-        return QSize(self.fontMetrics().horizontalAdvance(self._full_text), self.fontMetrics().height())
+        return QSize(self.fontMetrics().horizontalAdvance(self._full_text) + self._horizontal_extra() + 2,
+                     self.fontMetrics().height())
 
     def _update_elided(self):
-        elided = self.fontMetrics().elidedText(self._full_text, Qt.ElideRight, self.width())
+        available = max(0, self.width() - self._horizontal_extra())
+        elided = self.fontMetrics().elidedText(self._full_text, Qt.ElideRight, available)
         super().setText(elided)
         self.setToolTip(self._full_text if elided != self._full_text else "")
 
