@@ -1550,10 +1550,13 @@ class MainWindow(QMainWindow):
         """Auto-detect and Ukrainian first, then the languages Whisper handles
         well, alphabetical in the interface language."""
         self._lang_combo.clear()
-        self._lang_combo.addItem(tr("Auto-detect"), "auto")
-        self._lang_combo.addItem(tr("Ukrainian"), "uk")
+        # Ukrainian spells language adjectives in lowercase; English names stay capitalized.
+        style = str.lower if get_language() == "uk" else (lambda t: t)
+        self._lang_combo.addItem(style(tr("Auto-detect")), "auto")
+        self._lang_combo.addItem(style(tr("Ukrainian")), "uk")
         collator = QCollator(QLocale(get_language()))
-        names = sorted(((tr(name), code) for code, name in _OTHER_LANGUAGES), key=lambda t: collator.sortKey(t[0]))
+        names = sorted(((style(tr(name)), code) for code, name in _OTHER_LANGUAGES),
+                       key=lambda t: collator.sortKey(t[0]))
         for text, code in names:
             self._lang_combo.addItem(text, code)
 
