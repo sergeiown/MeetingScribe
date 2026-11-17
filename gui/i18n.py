@@ -183,6 +183,10 @@ _UK = {
 
     # widgets.py (ModelRowWidget)
     "Installed": "Встановлено",
+    "Delete": "Видалити",
+    "Best accuracy, slowest - for when quality matters more than speed.": "Найвища точність, найповільніша - коли якість важливіша за швидкість.",
+    "Nearly large-v3's accuracy at a fraction of the time - a good default.": "Майже точність large-v3 за частку часу - добрий варіант за замовчуванням.",
+    "Fastest and lightest - good for quick drafts or low-power machines.": "Найшвидша і найлегша - для швидких чернеток або слабких машин.",
     "Not installed": "Не встановлено",
     "Download": "Завантажити",
     "Needs HF_TOKEN - enter it above": "Потрібен HF_TOKEN - введіть його вище",

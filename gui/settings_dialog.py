@@ -87,8 +87,10 @@ class ModelsTab(QWidget):
         rec_box = QGroupBox(tr("Recognition (Whisper)"))
         rec_layout = QVBoxLayout(rec_box)
         rec_layout.setSpacing(10)
+        rec_engine, rec_key = core.recommended_model()
         for spec in core.WHISPER_MODELS:
-            row = ModelRowWidget(spec.label, spec.size, spec.description, core.is_whisper_installed(spec.key))
+            row = ModelRowWidget(spec.label, spec.size, tr(spec.description), core.is_whisper_installed(spec.key),
+                                 recommended=(rec_engine == "faster-whisper" and spec.key == rec_key))
             row.download_requested.connect(lambda s=spec: self._start_download(s))
             row.delete_requested.connect(lambda s=spec: self._delete_whisper(s))
             rec_layout.addWidget(row)
@@ -109,7 +111,8 @@ class ModelsTab(QWidget):
             gpu_layout.addWidget(note)
             for spec in core.WHISPER_MODELS:
                 row = ModelRowWidget(spec.label, core.whisper_cpp.GGML_SIZES.get(spec.key, ""),
-                                     spec.description, core.whisper_cpp.is_model_installed(spec.key, core.MODELS_DIR))
+                                     tr(spec.description), core.whisper_cpp.is_model_installed(spec.key, core.MODELS_DIR),
+                                     recommended=(rec_engine == "vulkan" and spec.key == rec_key))
                 row.download_requested.connect(lambda s=spec: self._start_gpu_download(s))
                 row.delete_requested.connect(lambda s=spec: self._delete_gpu_model(s))
                 gpu_layout.addWidget(row)

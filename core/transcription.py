@@ -62,6 +62,16 @@ def choose_engine(device_preference: str = "auto") -> str:
     return "vulkan" if whisper_cpp.gpu_is_usable(gpu_name) else "faster-whisper"
 
 
+def recommended_model() -> tuple:
+    """(engine, model key) worth downloading first on this system: large-v3 on
+    an NVIDIA or Vulkan-capable GPU, the light small model on a CPU-only machine."""
+    if choose_engine("auto") == "vulkan":
+        return "vulkan", "large-v3"
+    if nvidia_gpu_present():
+        return "faster-whisper", "large-v3"
+    return "faster-whisper", "small"
+
+
 def _assemble_text(segments) -> str:
     lines = []
     last_ts = -30

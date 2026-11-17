@@ -239,7 +239,7 @@ class ModelRowWidget(QFrame):
     cancel_requested = Signal()
     delete_requested = Signal()
 
-    def __init__(self, label, size, description, installed, parent=None):
+    def __init__(self, label, size, description, installed, parent=None, recommended=False):
         super().__init__(parent)
         # Full card style (see style.py's QFrame#modelRow) keeps row extent
         # visually unambiguous even when neighboring rows differ in height.
@@ -249,7 +249,7 @@ class ModelRowWidget(QFrame):
         outer.setSpacing(4)
 
         top_row = QHBoxLayout()
-        top_row.addWidget(QLabel(label), stretch=1)
+        top_row.addWidget(QLabel(label + (tr("  [recommended]") if recommended else "")), stretch=1)
 
         size_label = QLabel(size)
         size_label.setProperty("hint", True)
