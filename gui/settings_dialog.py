@@ -155,10 +155,13 @@ class ModelsTab(QWidget):
         self._show_action.triggered.connect(self._toggle_token_visibility)
         self._token_visible = False
         token_row.addWidget(self._token_edit, stretch=1)
-        save_token_btn = QPushButton(tr("Save token"))
-        fit_action_button_width(save_token_btn)
-        save_token_btn.clicked.connect(self._save_token)
-        token_row.addWidget(save_token_btn)
+        self._save_token_btn = QPushButton(tr("Save token"))
+        fit_action_button_width(self._save_token_btn)
+        self._save_token_btn.clicked.connect(self._save_token)
+        token_row.addWidget(self._save_token_btn)
+        self._saved_token = core.read_hf_token()
+        self._token_edit.textChanged.connect(self._update_save_token_button)
+        self._update_save_token_button()
         token_card_layout.addLayout(token_row)
         diar_layout.addWidget(token_card)
 
@@ -191,8 +194,14 @@ class ModelsTab(QWidget):
         self._write_token()
         QMessageBox.information(self, tr("Saved"), tr("HF_TOKEN saved to config.env."))
 
+    def _update_save_token_button(self):
+        self._save_token_btn.setEnabled(self._token_edit.text().strip() != self._saved_token)
+
     def _write_token(self):
-        core.write_config_env({"HF_TOKEN": self._token_edit.text().strip()})
+        token = self._token_edit.text().strip()
+        core.write_config_env({"HF_TOKEN": token})
+        self._saved_token = token
+        self._update_save_token_button()
         self.refresh_token_state()
 
     def _start_download(self, spec):
