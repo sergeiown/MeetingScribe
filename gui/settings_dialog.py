@@ -111,7 +111,7 @@ class ModelsTab(QWidget):
             note.setProperty("hint", True)
             gpu_layout.addWidget(note)
             for spec in core.WHISPER_MODELS:
-                row = ModelRowWidget(spec.label, core.whisper_cpp.GGML_SIZES.get(spec.key, ""),
+                row = ModelRowWidget(f"{spec.label} (GPU)", core.whisper_cpp.GGML_SIZES.get(spec.key, ""),
                                      tr(spec.description), core.whisper_cpp.is_model_installed(spec.key, core.MODELS_DIR),
                                      recommended=(rec_engine == "vulkan" and spec.key == rec_key))
                 row.download_requested.connect(lambda s=spec: self._start_gpu_download(s))

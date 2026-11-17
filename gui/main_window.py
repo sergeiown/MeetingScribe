@@ -905,15 +905,16 @@ class MainWindow(QMainWindow):
         gpu_models = (core.installed_gpu_whisper_sizes()
                       if core.choose_engine(get_device_preference()) == "vulkan" else [])
         if gpu_models:
-            installed, device = gpu_models, "cuda"
+            installed, device, engine_tag = gpu_models, "cuda", "GPU"
         else:
             installed = core.installed_whisper_sizes()
             use_gpu = core.nvidia_gpu_present() and get_device_preference() != "cpu"
             device = "cuda" if use_gpu else "cpu"
+            engine_tag = "CUDA" if use_gpu else "CPU"
         recommended = core.recommend_whisper_model(installed, device)
         for spec in core.WHISPER_MODELS:  # heaviest-first catalog order
             if spec.key in installed:
-                label = spec.label + (tr("  [recommended]") if spec.key == recommended else "")
+                label = f"{spec.label} ({engine_tag})" + (tr("  [recommended]") if spec.key == recommended else "")
                 self._model_combo.addItem(label, spec.key)
         if recommended:
             idx = self._model_combo.findData(recommended)
